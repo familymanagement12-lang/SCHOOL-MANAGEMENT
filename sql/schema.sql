@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS students (
   name TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   dob DATE,
+  allergies TEXT,
+  disability TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

@@ -1,0 +1,7 @@
+BEGIN;
+
+ALTER TABLE students
+  ADD COLUMN IF NOT EXISTS allergies TEXT,
+  ADD COLUMN IF NOT EXISTS disability TEXT;
+
+COMMIT;
