@@ -16,7 +16,8 @@ function Classes() {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
-  const [formData, setFormData] = useState({ name: 'Year 1', description: '', class_teacher_id: '', year_level: '1', teaching_model: 'class_teacher', curriculum: 'COMMON' });
+  const emptyForm = { name: '', description: '', class_teacher_id: '', teaching_model: 'class_teacher' };
+  const [formData, setFormData] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -57,7 +58,7 @@ function Classes() {
     try {
       if (editingId) await updateClass(editingId, formData);
       else await createClass(formData);
-      setFormData({ name: 'Year 1', description: '', class_teacher_id: '', year_level: '1', teaching_model: 'class_teacher', curriculum: 'COMMON' });
+      setFormData(emptyForm);
       setEditingId(null);
       await fetchPageData();
     } catch (err) {
@@ -71,15 +72,13 @@ function Classes() {
       name: classItem.name,
       description: classItem.description || '',
       class_teacher_id: String(classItem.class_teacher_id || classItem.teacher_id || ''),
-      year_level: String(classItem.year_level || ''),
-      teaching_model: classItem.teaching_model || (Number(classItem.year_level) <= 3 ? 'class_teacher' : 'subject_teacher'),
-      curriculum: classItem.curriculum || (Number(classItem.year_level) <= 6 ? 'COMMON' : ''),
+      teaching_model: classItem.teaching_model || 'class_teacher',
     });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setFormData({ name: 'Year 1', description: '', class_teacher_id: '', year_level: '1', teaching_model: 'class_teacher', curriculum: 'COMMON' });
+    setFormData(emptyForm);
   };
 
   const handleDelete = async (id) => {
@@ -124,47 +123,14 @@ function Classes() {
 
               {error && <div className="error">{error}</div>}
 
-              <label>Year / Stream Name *</label>
+              <label>Class Name *</label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(event) => setFormData({ ...formData, name: event.target.value })}
-                placeholder="Example: Year 5 or Year 5A"
+                placeholder="Example: Kindergarten A or Blue Class"
                 required
               />
-              <small>Use the year as the class name; add a stream letter if needed.</small>
-
-              <label>Year Level *</label>
-              <input
-                type="number"
-                min="1"
-                max="11"
-                value={formData.year_level}
-                onChange={(event) => {
-                  const yearLevel = event.target.value;
-                  const followsYearName = !formData.name || /^Year\s+\d+$/i.test(formData.name.trim());
-                  setFormData({
-                    ...formData,
-                    name: followsYearName && yearLevel ? `Year ${yearLevel}` : formData.name,
-                    year_level: yearLevel,
-                    teaching_model: Number(yearLevel) <= 3 ? 'class_teacher' : 'subject_teacher',
-                    curriculum: Number(yearLevel) <= 6 ? 'COMMON' : Number(yearLevel) <= 9 ? '' : 'PEARSON'
-                  });
-                }}
-                required
-              />
-
-              {Number(formData.year_level) >= 7 && Number(formData.year_level) <= 9 && <>
-                <label htmlFor="class-curriculum">Curriculum pathway *</label>
-                <select id="class-curriculum" value={formData.curriculum} onChange={(event) => setFormData({ ...formData, curriculum: event.target.value })} required>
-                  <option value="">Select curriculum</option>
-                  <option value="GES">GES</option>
-                  <option value="PEARSON">Pearson</option>
-                </select>
-                <small>Years 7–9 use separate classes for GES and Pearson streams.</small>
-              </>}
-              {Number(formData.year_level) <= 6 && <p>Years 1–6 use the common school curriculum.</p>}
-              {Number(formData.year_level) >= 10 && Number(formData.year_level) <= 11 && <p>Years 10–11 are automatically assigned to Pearson.</p>}
 
               <label>Class Teacher *</label>
               <select
@@ -176,12 +142,6 @@ function Classes() {
                 {teachers.map(teacher => (
                   <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
                 ))}
-              </select>
-
-              <label>Default Teaching Model *</label>
-              <select value={formData.teaching_model} onChange={(event) => setFormData({ ...formData, teaching_model: event.target.value })} required>
-                <option value="class_teacher">Class teacher (default Years 1–3)</option>
-                <option value="subject_teacher">Subject teacher (default Year 4+)</option>
               </select>
 
               <label>Description</label>
@@ -207,7 +167,7 @@ function Classes() {
                   <h3>{classItem.name}</h3>
                   <p>{classItem.description || 'No description added yet.'}</p>
                   <p className="teacher-badge">Class teacher: {classItem.teacherName || 'Not assigned'}</p>
-                  <p className="teacher-badge">Year {classItem.year_level || '—'} · {classItem.curriculum || 'Curriculum not assigned'} · {classItem.teaching_model === 'class_teacher' ? 'Class-teacher teaching' : 'Subject-teacher teaching'}</p>
+                  {classItem.curriculum && classItem.curriculum !== 'UNASSIGNED' && <p className="teacher-badge">Curriculum: {classItem.curriculum}</p>}
                 </div>
                 <div className="class-count">
                   <strong>{classItem.studentCount}</strong>

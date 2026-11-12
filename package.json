@@ -10,6 +10,7 @@
     "db:migrate:student-portal": "node scripts/migrate_student_portal.js",
     "db:migrate:student-support": "node scripts/migrate_student_support_fields.js",
     "db:migrate:school-name": "node scripts/migrate_school_name.js",
+    "db:migrate:optional-class-year": "node scripts/migrate_optional_class_year_level.js",
     "db:migrate:accountant-rls": "node scripts/migrate_accountant_rls_audit.js",
     "db:migrate:timetable": "node scripts/migrate_timetable.js",
     "admin:seed": "node scripts/seed_admin.js",

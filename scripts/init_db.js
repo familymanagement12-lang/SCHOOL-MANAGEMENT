@@ -9,7 +9,7 @@ const { Pool } = require('pg');
 	try {
 		const schema = fs.readFileSync(path.join(__dirname, '../sql/schema.sql'), 'utf8');
 		await pool.query(schema);
-		for (const file of ['20261017_timetable_foundation.sql', '20261018_timetable_management.sql', '20261019_timetable_term_scope.sql', '20261020_timetable_integrity.sql', '20261111_class_assessments.sql', '20261112_curriculum_foundation.sql', '20261112_student_support_fields.sql', '20261112_school_name.sql', '20261113_student_portal.sql', '20261114_accountant_rls_audit.sql']) {
+		for (const file of ['20261017_timetable_foundation.sql', '20261018_timetable_management.sql', '20261019_timetable_term_scope.sql', '20261020_timetable_integrity.sql', '20261111_class_assessments.sql', '20261112_curriculum_foundation.sql', '20261112_student_support_fields.sql', '20261112_school_name.sql', '20261112_optional_class_year_level.sql', '20261113_student_portal.sql', '20261114_accountant_rls_audit.sql']) {
 			const migration = fs.readFileSync(path.join(__dirname, '../sql/migrations', file), 'utf8');
 			await pool.query(migration);
 		}

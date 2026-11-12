@@ -26,6 +26,7 @@ In the Render API service, set `CORS_ORIGIN` and `FRONTEND_URL` to the deployed 
 - `npm run db:migrate:curriculum` adds curriculum pathways, subject mappings, and curriculum grading-configuration storage without deleting existing records.
 - `npm run db:migrate:student-portal` adds result publication controls and student portal audit logging without deleting existing records.
 - `npm run db:migrate:school-name` updates the school record to its correct name without deleting existing records.
+- `npm run db:migrate:optional-class-year` allows classes to be created without a year level while preserving existing class assignments.
 - `npm run db:migrate:accountant-rls` adds the accountant finance role support, finance change audit history, and PostgreSQL row-level policies to finance tables.
 - `npm run db:migrate:timetable` applies or rechecks the timetable-management migrations independently.
 - `npm run admin:seed` creates the initial administrator; it does not print the password.
