@@ -29,8 +29,7 @@ function ForgotPassword() {
       <section className="auth-split-left login-brand-panel">
         <div className="login-brand-content">
           <div className="login-school-brand">
-            <img src="/mccarthy-hill-school.svg" alt="" />
-            <span>The McCarthy Hill School</span>
+            <img src="/the-mccarthy-hill-school-logo.png" alt="The McCarthy Hill School" />
           </div>
 
           <div className="login-brand-copy">

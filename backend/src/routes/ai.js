@@ -24,7 +24,7 @@ router.get('/status', (req, res) => {
 router.post('/chat', async (req, res) => {
   const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
   if (!question || question.length > MAX_QUESTION_LENGTH) {
-    return res.status(400).json({ message: `Enter a message between 1 and ${MAX_QUESTION_LENGTH} characters.` });
+    return res.status(400).json({ message: 'Please enter a message of up to 2,000 characters.' });
   }
   const key = `${req.user.school_id}:${req.user.id}`;
   const now = Date.now();
@@ -39,7 +39,7 @@ router.post('/chat', async (req, res) => {
     windows.set(key, window);
   }
   if (window.count >= MAX_REQUESTS_PER_WINDOW) {
-    return res.status(429).json({ message: 'You have reached the assistant limit of 10 messages per minute. Please wait and try again.' });
+    return res.status(429).json({ message: 'You’ve sent several messages in a short time. Please wait a moment and try again.' });
   }
   window.count += 1;
 
@@ -49,7 +49,7 @@ router.post('/chat', async (req, res) => {
   }) : [];
   const intent = classifyQuestion(question);
   if (!allowedIntent(req.user.role, intent)) {
-    return res.status(403).json({ message: 'Your role does not have access to that school information.' });
+    return res.status(403).json({ message: 'Sorry, you cannot view that information with this account.' });
   }
 
   try {
@@ -62,8 +62,8 @@ router.post('/chat', async (req, res) => {
         providerUsed = true;
       } catch (error) {
         console.error('[mccarthy-ai] provider request failed', { status: error.status || 'timeout_or_network' });
-        if (error.status === 429) return res.status(503).json({ message: 'The AI provider is busy. Try again shortly.' });
-        return res.status(503).json({ message: 'McCarthy AI could not reach the AI provider. Please try again later.' });
+        if (error.status === 429) return res.status(503).json({ message: 'I’m busy right now. Please try again shortly.' });
+        return res.status(503).json({ message: 'I’m having trouble answering right now. Please try again shortly.' });
       }
     } else {
       answer = fallbackAnswer(intent, facts);
@@ -72,7 +72,7 @@ router.post('/chat', async (req, res) => {
     return res.json({ answer, source: facts.source, provider_available: Boolean(process.env.OPENAI_API_KEY), provider_used: providerUsed });
   } catch (error) {
     console.error('[mccarthy-ai] verified query failed', { intent, code: error.code || 'unknown' });
-    return res.status(500).json({ message: 'I could not read the verified school records for that request. Please try again or contact an administrator.' });
+    return res.status(500).json({ message: 'I couldn’t get that information just now. Please try again.' });
   }
 });
 

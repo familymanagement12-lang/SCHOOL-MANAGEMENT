@@ -108,15 +108,15 @@ function McCarthyAI() {
           <div>
             <p className="eyebrow">School assistant</p>
             <h1>McCarthy AI</h1>
-            <p>Ask about verified school records or get help preparing teaching material.</p>
+            <p>Ask a school question or get help with lessons, quizzes, and explanations.</p>
           </div>
           <div className={`ai-availability ${providerAvailable ? 'is-ready' : providerAvailable === false ? 'is-limited' : ''}`}>
-            <span />{providerAvailable === null ? 'Checking assistant' : providerAvailable ? 'AI assistant ready' : 'Database answers available'}
+              <span />{providerAvailable === null ? 'Getting ready' : providerAvailable ? 'Ready to help' : 'School questions available'}
           </div>
         </section>
 
         {!providerAvailable && providerAvailable !== null && <div className="ai-notice" role="status">
-          AI-generated summaries and teaching drafts are unavailable until the backend OpenAI key is configured. Verified school-data queries will still return directly from authorized database records.
+            Some features are temporarily unavailable, but you can still ask questions about school information.
         </div>}
         {error && <div className="error ai-error" role="alert">{error}</div>}
 
@@ -133,7 +133,7 @@ function McCarthyAI() {
               <div className="ai-empty-state">
                 <span className="ai-empty-icon"><Sparkles size={20} aria-hidden="true" /></span>
                 <h3>How can I help?</h3>
-                <p>Choose a prompt or ask a question. School facts are checked against records your role is allowed to see.</p>
+                <p>Choose a question below or type your own. I’ll help with the school information you’re allowed to see.</p>
                 <div className="ai-prompt-list">
                   {prompts.map((prompt) => <button type="button" key={prompt} onClick={() => sendMessage(prompt)} disabled={loading}>{prompt}</button>)}
                 </div>
@@ -144,11 +144,10 @@ function McCarthyAI() {
                 <div className="ai-message-content">
                   <strong>{message.role === 'user' ? 'You' : 'McCarthy AI'}</strong>
                   <div className="ai-answer-text">{renderAnswer(message.content)}</div>
-                  {message.source && <small className="ai-source">Source: {message.source}</small>}
                 </div>
               </article>
             ))}
-            {loading && <div className="ai-thinking"><span className="ai-thinking-dots"><i /><i /><i /></span>Checking authorized records and preparing an answer…</div>}
+            {loading && <div className="ai-thinking"><span className="ai-thinking-dots"><i /><i /><i /></span>Thinking…</div>}
             <div ref={conversationEnd} />
           </div>
 
@@ -156,14 +155,14 @@ function McCarthyAI() {
             <textarea
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Ask a school question or request teaching material..."
+              placeholder="Type your question here..."
               maxLength={2000}
               rows={2}
               aria-label="Your message"
               disabled={loading}
             />
             <div className="ai-composer-footer">
-              <span>Read-only school records · Your messages are not saved after leaving this page</span>
+              <span>Your messages are not saved after you leave this page.</span>
               <button className="btn-primary" type="submit" disabled={loading || !question.trim()}>
                 <Send size={14} aria-hidden="true" />{loading ? 'Working…' : 'Send'}
               </button>

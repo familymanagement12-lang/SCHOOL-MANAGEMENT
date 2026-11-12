@@ -62,7 +62,7 @@ function Sidebar({ mobileOpen = false, onNavigate = () => {} }) {
       {mobileOpen && <button className="sidebar-scrim" aria-label="Dismiss navigation backdrop" onClick={onNavigate} />}
       <aside className={`app-sidebar${mobileOpen ? ' is-open' : ''}`}>
         <div className="sidebar-brand">
-          <img src={school?.logo_url || '/mccarthy-hill-school.svg'} alt="" />
+          <img src={school?.logo_url || '/mccarthy-hill-school-crest.png'} alt="" />
           <div className="sidebar-brand-copy">
             <strong>{school?.name || 'McCarthy Hill'}</strong>
             <span>School operations</span>
