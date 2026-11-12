@@ -37,6 +37,9 @@ function providerConfigured() {
 function sendProviderError(res, error) {
   console.error('[mccarthy-ai] provider request failed', { status: error.status || 'timeout_or_network' });
   if (error.status === 429) {
+    if (['credit_balance_exhausted', 'insufficient_quota', 'billing_hard_limit_reached'].includes(error.code)) {
+      return res.status(503).json({ message: 'AI replies are temporarily unavailable because the AI account has no available credits. Please contact the school administrator.' });
+    }
     return res.status(503).json({ message: 'The assistant is busy right now. Please try again shortly.' });
   }
   if (error.status === 401 || error.status === 403) {
@@ -146,7 +149,11 @@ async function handleAssistantRequest(req, res, { forcedMode, generation }) {
       });
       answer = providerResult.text;
     } catch (error) {
-      return sendProviderError(res, error);
+      if (mode !== 'school_data') return sendProviderError(res, error);
+      console.warn('[mccarthy-ai] provider unavailable; using verified school-data summary', {
+        status: error.status || 'timeout_or_network',
+      });
+      answer = fallbackAnswer(intent, facts);
     }
   } else if (mode === 'school_data') {
     answer = fallbackAnswer(intent, facts);
