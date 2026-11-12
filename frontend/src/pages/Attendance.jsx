@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getAttendanceByClass, recordAttendance } from '../api/attendance';
+import { getAttendanceByClass, getStaffAttendance, recordAttendance, recordStaffAttendance } from '../api/attendance';
 import { getClasses } from '../api/classes';
 import { getStudents } from '../api/students';
 
@@ -21,8 +21,15 @@ function Attendance() {
   const [records, setRecords] = useState([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [formData, setFormData] = useState({ student_id: '', date: getToday(), status: 'present' });
+  const [view, setView] = useState('students');
+  const [staffDate, setStaffDate] = useState(getToday());
+  const [staffRecords, setStaffRecords] = useState([]);
+  const [savingStaff, setSavingStaff] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const user = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
+  })();
 
   useEffect(() => {
     fetchSetupData();
@@ -32,6 +39,10 @@ function Attendance() {
     if (selectedClass) fetchAttendance(selectedClass);
     else setRecords([]);
   }, [selectedClass]);
+
+  useEffect(() => {
+    if (view === 'staff' && user?.role === 'admin') fetchStaffAttendance(staffDate);
+  }, [view, staffDate]);
 
   const fetchSetupData = async () => {
     try {
@@ -52,6 +63,16 @@ function Attendance() {
       setRecords(response.data);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load attendance records');
+    }
+  };
+
+  const fetchStaffAttendance = async (date) => {
+    setError('');
+    try {
+      const response = await getStaffAttendance(date);
+      setStaffRecords(response.data.map((record) => ({ ...record, status: record.status || '', reason: record.reason || '' })));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to load staff attendance');
     }
   };
 
@@ -79,6 +100,33 @@ function Attendance() {
     }
   };
 
+  const handleStaffSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+    const recordsToSave = staffRecords.filter((record) => record.status).map((record) => ({
+      employee_id: record.employee_id,
+      status: record.status,
+      reason: record.reason,
+    }));
+    if (!recordsToSave.length) {
+      setError('Choose an attendance status for at least one staff member.');
+      return;
+    }
+    if (recordsToSave.some((record) => record.status === 'absent' && !record.reason.trim())) {
+      setError('Enter a reason for each staff member marked absent.');
+      return;
+    }
+    setSavingStaff(true);
+    try {
+      await recordStaffAttendance({ date: staffDate, records: recordsToSave });
+      await fetchStaffAttendance(staffDate);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to save staff attendance');
+    } finally {
+      setSavingStaff(false);
+    }
+  };
+
   if (loading) return <div className="page"><p>Loading attendance...</p></div>;
 
   return (
@@ -88,10 +136,41 @@ function Attendance() {
           <div>
             <p className="eyebrow">Daily register</p>
             <h1>Attendance</h1>
-            <p>Record and review attendance for your class.</p>
+            <p>Record and review student attendance{user?.role === 'admin' ? ' and staff attendance' : ''}.</p>
           </div>
         </section>
 
+        {user?.role === 'admin' && <div className="inventory-actions" role="tablist" aria-label="Attendance type">
+          <button type="button" className={view === 'students' ? 'btn-primary' : 'btn-secondary'} role="tab" aria-selected={view === 'students'} onClick={() => setView('students')}>Student attendance</button>
+          <button type="button" className={view === 'staff' ? 'btn-primary' : 'btn-secondary'} role="tab" aria-selected={view === 'staff'} onClick={() => setView('staff')}>Staff attendance</button>
+        </div>}
+
+        {view === 'staff' && user?.role === 'admin' ? (
+          <section className="data-panel">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Daily staff register</p><h2>Staff attendance and absence reasons</h2></div>
+              <label htmlFor="staff-attendance-date">Attendance date<input id="staff-attendance-date" type="date" value={staffDate} onChange={(event) => setStaffDate(event.target.value)} /></label>
+            </div>
+            {error && <div className="error attendance-alert" role="alert">{error}</div>}
+            <form onSubmit={handleStaffSubmit}>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Staff member</th><th>Position</th><th>Status</th><th>Reason for absence</th></tr></thead>
+                  <tbody>{staffRecords.map((record) => <tr key={record.employee_id}>
+                    <td>{record.full_name}</td>
+                    <td>{record.staff_role}</td>
+                    <td><select aria-label={`Attendance status for ${record.full_name}`} value={record.status} onChange={(event) => setStaffRecords((previous) => previous.map((entry) => entry.employee_id === record.employee_id ? { ...entry, status: event.target.value, reason: event.target.value === 'absent' ? entry.reason : '' } : entry))}>
+                      <option value="">Not marked</option>{ATTENDANCE_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}
+                    </select></td>
+                    <td><input aria-label={`Absence reason for ${record.full_name}`} value={record.reason} onChange={(event) => setStaffRecords((previous) => previous.map((entry) => entry.employee_id === record.employee_id ? { ...entry, reason: event.target.value } : entry))} placeholder={record.status === 'absent' ? 'Required for absent staff' : 'Optional note'} required={record.status === 'absent'} maxLength={500} /></td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+              {!staffRecords.length && <div className="empty-state">No staff members are available for this date.</div>}
+              <button className="btn-primary attendance-submit" type="submit" disabled={!staffRecords.length || savingStaff}>{savingStaff ? 'Saving…' : 'Save staff attendance'}</button>
+            </form>
+          </section>
+        ) : <>
         <section className="data-panel attendance-class-panel">
           <div className="attendance-class-heading">
             <label htmlFor="attendance-class">Selected class</label>
@@ -194,6 +273,7 @@ function Attendance() {
             )}
           </section>
         </section>
+        </>}
       </div>
     </div>
   );

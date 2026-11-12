@@ -63,7 +63,8 @@ const getFeesByStudent = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      `SELECT f.id, f.student_id, f.amount_due, f.amount_paid, f.balance, f.due_date, f.created_at
+      `SELECT f.id, f.student_id, f.amount_due, f.amount_paid, f.balance, f.due_date,
+              f.description, f.fee_structure_id, f.is_fee_override, f.fee_override_reason, f.created_at
        FROM fees f
        JOIN students s ON f.student_id = s.id
        WHERE f.student_id = $1 AND f.school_id = $2 ${filterQuery}`,

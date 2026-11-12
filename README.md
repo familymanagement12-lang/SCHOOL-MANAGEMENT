@@ -29,6 +29,7 @@ In the Render API service, set `CORS_ORIGIN` and `FRONTEND_URL` to the deployed 
 - `npm run db:migrate:optional-class-year` allows classes to be created without a year level while preserving existing class assignments.
 - `npm run db:migrate:optional-class-teacher` allows classes to be created before assigning a teacher while preserving existing class assignments.
 - `npm run db:migrate:school-store` additively upgrades the existing inventory catalogue with suppliers, purchase receipts, stock movements, issuances, assets, requests, stocktakes, audit history, and row-level security.
+- `npm run db:migrate:fee-overrides-staff-attendance` adds individual fee adjustments and the staff attendance register without removing existing fee or employee data.
 - `npm run db:migrate:accountant-rls` adds the accountant finance role support, finance change audit history, and PostgreSQL row-level policies to finance tables.
 - `npm run db:migrate:timetable` applies or rechecks the timetable-management migrations independently.
 - `npm run admin:seed` creates the initial administrator; it does not print the password.
@@ -49,6 +50,11 @@ The existing inventory catalogue is extended in place; the additive `npm run db:
 Administrators, inventory users, and the separate `storekeeper` role can access the store dashboard, catalogue, suppliers, purchases, issuance, asset management, maintenance, stocktakes, alerts, reports, and transaction history. Only administrators can create accounts or dispose of assets. Teachers can submit and track their own departmental requests; approval and fulfilment are restricted to store roles on the backend. Create inventory or storekeeper accounts in Accounts & Roles. The legacy `store` role remains an alias for `inventory`.
 
 Item and asset barcode labels can be printed. USB barcode scanners that type into the focused search field work in keyboard-wedge mode; configure the scanner to send Enter after each scan. Teachers can still view only inventory assigned to their account.
+
+## Fees and staff attendance
+When applying a fee structure to selected classes, administrators and accountants can set a different total fee for an individual student and must record a reason for each difference. Students without an adjustment receive the normal class total. The adjustment and reason are retained with the fee record and finance audit history.
+
+Administrators can switch the Attendance page to the staff register, mark active employees present, absent, late, or excused for a selected date, and record a required reason for each absence. Staff attendance changes are retained in an audit history and are protected by backend authorization and school-level row security. Apply the additive migration with `npm run db:migrate:fee-overrides-staff-attendance`.
 
 ## Staff registry
 The Staff Registry role selector includes common school job titles across teaching, administration, finance, library, inventory, IT, health, support, and operations, plus an `Other` option for custom titles. These are employee job titles used for staff records and payroll, not application login permissions.

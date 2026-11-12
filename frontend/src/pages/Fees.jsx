@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getFeesByStudent, recordFee } from '../api/fees';
 import { getStudents } from '../api/students';
 import { getClasses } from '../api/classes';
-import api from '../api/api';
+import { createFeeStructure } from '../api/fees';
 
 const getCurrentUser = () => {
   try {
@@ -29,7 +29,8 @@ function Fees() {
     academic_year: '2026/2027',
     term: 'First Term',
     class_ids: [],
-    items: [{ fee_name: 'Tuition Fee', amount: '' }, { fee_name: 'PTA Fee', amount: '' }]
+    items: [{ fee_name: 'Tuition Fee', amount: '' }, { fee_name: 'PTA Fee', amount: '' }],
+    student_overrides: {},
   });
   const [isBilling, setIsBilling] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -74,6 +75,14 @@ function Fees() {
   };
 
   const selectedStudentRecord = students.find((student) => String(student.id) === selectedStudent);
+  const selectedStructureStudents = useMemo(
+    () => students.filter((student) => structureData.class_ids.map(String).includes(String(student.class_id))),
+    [students, structureData.class_ids]
+  );
+  const standardStructureAmount = useMemo(
+    () => Math.round(structureData.items.reduce((sum, item) => sum + Number(item.amount || 0), 0) * 100) / 100,
+    [structureData.items]
+  );
 
   const totals = useMemo(() => fees.reduce((sum, fee) => ({
     due: sum.due + Number(fee.amount_due || 0),
@@ -119,10 +128,20 @@ function Fees() {
 
     try {
       // Use direct API call to the new structure endpoint
-      const res = await api.post('/fee-structures', structureData);
+      const student_overrides = Object.entries(structureData.student_overrides)
+        .filter(([, override]) => override.amount_due !== '' && Math.round(Number(override.amount_due) * 100) !== Math.round(standardStructureAmount * 100))
+        .map(([student_id, override]) => ({
+          student_id: Number(student_id),
+          amount_due: Number(override.amount_due),
+          reason: override.reason,
+        }));
+      const res = await createFeeStructure({
+        ...structureData,
+        student_overrides,
+      });
       
       setShowStructureModal(false);
-      setStructureData({ academic_year: '2026/2027', term: 'First Term', class_ids: [], items: [{ fee_name: 'Tuition Fee', amount: '' }] });
+      setStructureData({ academic_year: '2026/2027', term: 'First Term', class_ids: [], items: [{ fee_name: 'Tuition Fee', amount: '' }], student_overrides: {} });
       
       if (selectedStudent) await fetchFees(selectedStudent);
       alert(res.data.message);
@@ -240,7 +259,7 @@ function Fees() {
                 <tbody>
                   {fees.map((fee) => (
                     <tr key={fee.id}>
-                      <td>{fee.description || '-'}</td>
+                      <td>{fee.description || '-'}{fee.is_fee_override && <div style={{ color: '#b45309', fontSize: '.8rem' }}>Individual adjustment: {fee.fee_override_reason}</div>}</td>
                       <td>{formatMoney(fee.amount_due)}</td>
                       <td>{formatMoney(fee.amount_paid)}</td>
                       <td><span className={Number(fee.balance) > 0 ? 'balance-due' : 'balance-clear'}>{formatMoney(fee.balance)}</span></td>
@@ -260,7 +279,7 @@ function Fees() {
 
       {showStructureModal && (
         <div className="modal-overlay" onClick={() => setShowStructureModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px' }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '950px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
               <h2>Create Fee Structure</h2>
               <button className="btn-close" onClick={() => setShowStructureModal(false)}>x</button>
@@ -307,6 +326,41 @@ function Fees() {
                   </label>
                 ))}
               </div>
+
+              {selectedStructureStudents.length > 0 && (
+                <section style={{ marginBottom: '1.5rem' }}>
+                  <div style={{ marginBottom: '.75rem' }}>
+                    <h3 style={{ marginBottom: '.25rem' }}>Individual student fee adjustments</h3>
+                    <p style={{ color: '#64748b', margin: 0 }}>Leave an amount blank to use the class total of {formatMoney(standardStructureAmount)}. Enter a different amount and a reason for a student-specific adjustment.</p>
+                  </div>
+                  <div className="table-wrap" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                    <table>
+                      <thead><tr><th>Student</th><th>Class amount</th><th>Student amount</th><th>Reason for difference</th></tr></thead>
+                      <tbody>{selectedStructureStudents.map((student) => {
+                        const override = structureData.student_overrides[student.id] || { amount_due: '', reason: '' };
+                        return <tr key={student.id}>
+                          <td>{student.student_id} · {student.name}</td>
+                          <td>{formatMoney(standardStructureAmount)}</td>
+                          <td><input aria-label={`Fee amount for ${student.name}`} type="number" min="0" step=".01" value={override.amount_due} onChange={(event) => setStructureData((previous) => ({
+                            ...previous,
+                            student_overrides: {
+                              ...previous.student_overrides,
+                              [student.id]: { ...override, amount_due: event.target.value },
+                            },
+                          }))} placeholder="Use class amount" /></td>
+                          <td><input aria-label={`Fee adjustment reason for ${student.name}`} value={override.reason} onChange={(event) => setStructureData((previous) => ({
+                            ...previous,
+                            student_overrides: {
+                              ...previous.student_overrides,
+                              [student.id]: { ...override, reason: event.target.value },
+                            },
+                          }))} placeholder="Required if amount differs" maxLength={500} required={override.amount_due !== '' && Math.round(Number(override.amount_due) * 100) !== Math.round(standardStructureAmount * 100)} /></td>
+                        </tr>;
+                      })}</tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
 
               <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
                 <span style={{ fontSize: '1.1rem', color: '#0f172a' }}>Fee Items</span>
