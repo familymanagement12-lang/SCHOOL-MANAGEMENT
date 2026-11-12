@@ -54,11 +54,11 @@ const createUser = async (req, res, next) => {
     try {
       if (!resend) throw new Error('RESEND_API_KEY is not configured');
       await resend.emails.send({
-        from: 'McCarthy Hill School <onboarding@resend.dev>',
+        from: 'The McCarthy Hill School <onboarding@resend.dev>',
         to: email,
         subject: 'Verify your School Account',
         html: `
-          <h2>Welcome to McCarthy Hill School, ${name}!</h2>
+          <h2>Welcome to The McCarthy Hill School, ${name}!</h2>
           <p>Your account has been created successfully.</p>
           <p>Temporary Password: <strong>${generatedPassword}</strong></p>
           <p>Please click the link below to verify your email and activate your account:</p>

@@ -76,7 +76,7 @@ const BulkStudentUploader = ({ onSuccess }) => {
             }
 
             // Ignore the footer text if the user leaves it in the file
-            if (name && name !== '' && !name.includes('Powered by McCarthy Hill School')) {
+            if (name && name !== '' && !name.includes('Powered by The McCarthy Hill School')) {
               studentsList.push({ name, dob, allergies, disability });
             }
           }
@@ -193,7 +193,7 @@ const BulkStudentUploader = ({ onSuccess }) => {
     }
 
     // Footer
-    sheet.getCell('A63').value = 'Powered by McCarthy Hill School';
+    sheet.getCell('A63').value = 'Powered by The McCarthy Hill School';
     sheet.getCell('A63').font = { italic: true, color: { argb: 'FF94A3B8' } };
 
     const buffer = await workbook.xlsx.writeBuffer();

@@ -30,7 +30,7 @@ function ForgotPassword() {
         <div className="login-brand-content">
           <div className="login-school-brand">
             <img src="/mccarthy-hill-school.svg" alt="" />
-            <span>McCarthy Hill School</span>
+            <span>The McCarthy Hill School</span>
           </div>
 
           <div className="login-brand-copy">
@@ -49,7 +49,7 @@ function ForgotPassword() {
       <section className="auth-split-right login-form-panel">
         <div className="auth-form-container login-card">
           <div className="auth-header login-header">
-            <p className="login-kicker">McCarthy Hill School</p>
+            <p className="login-kicker">The McCarthy Hill School</p>
             <h2>Reset password</h2>
             <p>Enter your email address to receive reset instructions.</p>
           </div>

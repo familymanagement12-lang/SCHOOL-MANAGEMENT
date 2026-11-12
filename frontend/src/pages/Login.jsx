@@ -41,11 +41,11 @@ function Login() {
         <div className="login-brand-content">
           <div className="login-school-brand">
             <img src="/mccarthy-hill-school.svg" alt="" />
-            <span>McCarthy Hill School</span>
+            <span>The McCarthy Hill School</span>
           </div>
           <div className="login-brand-copy">
             <p className="login-kicker">School management system</p>
-            <h1>Welcome to<br />McCarthy Hill.</h1>
+            <h1>Welcome to<br />The McCarthy Hill School.</h1>
             <p>School management and library services in one place.</p>
           </div>
           <div className="login-trust-list">
@@ -58,7 +58,7 @@ function Login() {
       <section className="auth-split-right login-form-panel">
         <div className="auth-form-container login-card">
           <div className="auth-header login-header">
-            <p className="login-kicker">McCarthy Hill School</p>
+            <p className="login-kicker">The McCarthy Hill School</p>
             <h2>{greeting}</h2>
             <p>Sign in to continue to your account.</p>
           </div>

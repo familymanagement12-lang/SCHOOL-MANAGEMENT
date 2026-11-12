@@ -9,4 +9,4 @@ if (process.env.NODE_ENV === 'production' && !process.env.APP_DATABASE_URL) {
 
 const app = require('./app');
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => { console.log(`McCarthy Hill School API listening on http://localhost:${PORT}`); });
+app.listen(PORT, () => { console.log(`The McCarthy Hill School API listening on http://localhost:${PORT}`); });

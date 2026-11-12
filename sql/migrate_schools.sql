@@ -1,3 +1,3 @@
--- Single-school McCarthy Hill School configuration.
+-- Single-school The McCarthy Hill School configuration.
 -- Use sql/schema.sql for fresh installations.
 -- Subscription plans, trial expiry and tenant signup are intentionally not part of this build.

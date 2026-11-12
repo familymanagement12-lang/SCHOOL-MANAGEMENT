@@ -1,4 +1,4 @@
-# McCarthy Hill School Management System + Library
+# The McCarthy Hill School Management System + Library
 
 A single-school React/Vite + Node.js/Express + PostgreSQL system. Existing modules are retained: dashboard, students, classes and subjects, attendance, results/report cards, timetable, fees and finance, staff registry, payroll, inventory, announcements, user accounts, settings and notifications. The Library adds a searchable catalogue, copy counts, unique book/barcode codes, student/staff borrowing, due dates, return tracking and overdue reporting. Fines are disabled.
 
@@ -25,6 +25,7 @@ In the Render API service, set `CORS_ORIGIN` and `FRONTEND_URL` to the deployed 
 - `npm run db:migrate:class-assessments` applies the 50/50 class assessment grading migration independently.
 - `npm run db:migrate:curriculum` adds curriculum pathways, subject mappings, and curriculum grading-configuration storage without deleting existing records.
 - `npm run db:migrate:student-portal` adds result publication controls and student portal audit logging without deleting existing records.
+- `npm run db:migrate:school-name` updates the school record to its correct name without deleting existing records.
 - `npm run db:migrate:accountant-rls` adds the accountant finance role support, finance change audit history, and PostgreSQL row-level policies to finance tables.
 - `npm run db:migrate:timetable` applies or rechecks the timetable-management migrations independently.
 - `npm run admin:seed` creates the initial administrator; it does not print the password.
@@ -34,7 +35,7 @@ In the Render API service, set `CORS_ORIGIN` and `FRONTEND_URL` to the deployed 
 - `npm run check:backend` checks backend JavaScript syntax.
 
 ## Single-school configuration
-Public registration and subscription/plan routes are disabled; the seed process creates one fixed McCarthy Hill School record, and the fresh-install schema enforces a single row in `schools`. Internal `school_id` columns remain in the existing database schema because the existing modules use them for referential integrity and scoped queries; they are not exposed as a school selector or tenant-creation feature. Use a fresh database for this fresh-data package.
+Public registration and subscription/plan routes are disabled; the seed process creates one fixed school record for The McCarthy Hill School, and the fresh-install schema enforces a single row in `schools`. Internal `school_id` columns remain in the existing database schema because the existing modules use them for referential integrity and scoped queries; they are not exposed as a school selector or tenant-creation feature. Use a fresh database for this fresh-data package.
 
 ## Library
 Administrators and librarians can manage `/library`: add and edit books, search by title/author/code/ISBN/category, print barcode labels, issue books to existing student or staff records, and mark returns. A USB barcode scanner that types into the focused field (keyboard-wedge mode) works without a special driver; configure it to send Enter after each scan. When adding a title, scan an ISBN into the book-code field to look up and fill the title, author, publisher, and ISBN; review the details before saving. ISBN lookups use Open Library and require an internet connection. Non-ISBN barcode codes can still be entered manually. In Circulation, scan a book code or ISBN to select it for issue, then choose the borrower and due date. Scan a borrowed book code or ISBN in the return field to return its active loan; if multiple borrowers have the title, choose the correct borrower. Teachers can search the catalogue and view only their own borrowing history; they cannot view the school-wide register or issue/return books. Overdue items are flagged but no fines are calculated. Create librarian accounts in Accounts & Roles using the `librarian` role.

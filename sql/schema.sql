@@ -247,7 +247,7 @@ CREATE TABLE IF NOT EXISTS student_fee_accounts (
 );
 
 
--- McCarthy Hill School library module (no fines; barcode/book-code ready)
+-- The McCarthy Hill School library module (no fines; barcode/book-code ready)
 CREATE TABLE IF NOT EXISTS library_books (
   id SERIAL PRIMARY KEY,
   school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,

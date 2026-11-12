@@ -2,7 +2,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../backend/.en
 const { Pool } = require('pg');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const schoolName = process.env.DEMO_SCHOOL_NAME || 'McCarthy Hill School';
+const schoolName = process.env.DEMO_SCHOOL_NAME || 'The McCarthy Hill School';
 const academicYear = process.env.DEMO_ACADEMIC_YEAR || '2026/2027';
 const termName = process.env.DEMO_TERM || 'Term 1';
 

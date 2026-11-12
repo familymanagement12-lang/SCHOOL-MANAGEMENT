@@ -105,7 +105,7 @@ function Receipt() {
             </div>
           )}
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2.5rem', textTransform: 'uppercase', letterSpacing: '2px', color: '#1e3a8a' }}>{school.name || 'MCCARTHY HILL SCHOOL'}</h1>
+            <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2.5rem', textTransform: 'uppercase', letterSpacing: '2px', color: '#1e3a8a' }}>{school.name || 'THE MCCARTHY HILL SCHOOL'}</h1>
             <p style={{ margin: '0 0 0.25rem 0', color: '#475569', fontWeight: '600', fontSize: '1.1rem' }}>{school.address || '123 Education Lane, Learning City'}</p>
             <p style={{ margin: '0 0 0.5rem 0', color: '#475569' }}>Tel: {school.phone || '+1 234 567 8900'}</p>
             <h2 style={{ marginTop: '1rem', background: '#1e293b', color: 'white', display: 'inline-block', padding: '0.5rem 1.5rem', borderRadius: '999px', fontSize: '1.1rem', letterSpacing: '1px' }}>OFFICIAL PAYMENT RECEIPT</h2>
@@ -155,7 +155,7 @@ function Receipt() {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px dashed #cbd5e1', color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic' }}>
-          Powered by McCarthy Hill School
+          Powered by The McCarthy Hill School
         </div>
         
       </div>

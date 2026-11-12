@@ -41,8 +41,8 @@ function ResetPassword() {
         </div>
         <div style={{ position: 'relative', zIndex: 1, padding: '3rem' }}>
           <div style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '-0.025em', marginBottom: '4rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <img src="/mccarthy-hill-school.svg" alt="McCarthy Hill School Logo" style={{ height: '60px', objectFit: 'contain', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }} />
-            <span style={{ background: 'linear-gradient(to right, #60a5fa, #ffffff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>MCCARTHY HILL SCHOOL</span>
+            <img src="/mccarthy-hill-school.svg" alt="The McCarthy Hill School Logo" style={{ height: '60px', objectFit: 'contain', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }} />
+            <span style={{ background: 'linear-gradient(to right, #60a5fa, #ffffff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>THE MCCARTHY HILL SCHOOL</span>
           </div>
           <h1 style={{ fontSize: 'clamp(3rem, 4vw, 4.25rem)', fontWeight: 900, margin: '0 0 1.5rem 0', letterSpacing: '-0.025em', lineHeight: 1.05 }}>
             Create New<br/>Password.

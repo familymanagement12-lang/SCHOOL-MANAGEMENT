@@ -93,7 +93,7 @@ const forgotPassword = async (req, res, next) => {
       try {
         if (!resend) throw new Error('RESEND_API_KEY is not configured');
         await resend.emails.send({
-          from: 'McCarthy Hill School <onboarding@resend.dev>',
+          from: 'The McCarthy Hill School <onboarding@resend.dev>',
           to: user.email,
           subject: 'Password Reset Instructions',
           html: `<h2>Hello ${user.name},</h2><p>We received a request to reset your password.</p><p>Click the secure button below to set a new password. This link will safely expire in 15 minutes.</p><br/><a href="${resetLink}" style="display:inline-block;padding:12px 24px;background:#1e3a8a;color:white;text-decoration:none;border-radius:6px;font-weight:bold;">Reset Password</a><p style="margin-top:20px;font-size:0.9rem;color:#64748b;">If you didn't request this, you can safely ignore this email.</p>`

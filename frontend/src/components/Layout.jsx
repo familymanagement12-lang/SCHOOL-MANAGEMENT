@@ -189,7 +189,7 @@ function Layout() {
           <div className="workspace-heading">
             <button className="icon-button mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" title="Open navigation"><Menu size={19} /></button>
             <div>
-              <span className="workspace-kicker">McCarthy Hill School</span>
+              <span className="workspace-kicker">The McCarthy Hill School</span>
               <h1>{pageTitles[location.pathname] || 'School workspace'}</h1>
             </div>
           </div>
