@@ -20,17 +20,6 @@ UPDATE classes
 SET teaching_model = CASE WHEN year_level BETWEEN 1 AND 3 THEN 'class_teacher' ELSE 'subject_teacher' END
 WHERE teaching_model IS NULL;
 
-DO $$
-DECLARE
-  missing_count INTEGER;
-BEGIN
-  SELECT COUNT(*) INTO missing_count FROM classes WHERE class_teacher_id IS NULL;
-  IF missing_count > 0 THEN
-    RAISE EXCEPTION 'Timetable migration stopped: % existing class(es) have no assigned class teacher. Assign each class a teacher and rerun the migration.', missing_count;
-  END IF;
-END $$;
-
-ALTER TABLE classes ALTER COLUMN class_teacher_id SET NOT NULL;
 ALTER TABLE classes ALTER COLUMN teaching_model SET DEFAULT 'subject_teacher';
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'classes_teaching_model_check') THEN
@@ -42,6 +31,11 @@ CREATE INDEX IF NOT EXISTS idx_classes_school_year ON classes (school_id, year_l
 
 CREATE OR REPLACE FUNCTION validate_class_teacher_assignment() RETURNS trigger AS $$
 BEGIN
+  IF NEW.class_teacher_id IS NULL THEN
+    NEW.teacher_id := NULL;
+    RETURN NEW;
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM users
     WHERE id = NEW.class_teacher_id AND school_id = NEW.school_id

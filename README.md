@@ -9,7 +9,7 @@ A single-school React/Vite + Node.js/Express + PostgreSQL system. Existing modul
 ## Setup
 1. Create a fresh database named `mccarthy_hill_school` in PostgreSQL/pgAdmin.
 2. Copy `backend/.env.example` to `backend/.env`; set the migration/admin `DATABASE_URL`, a long random `JWT_SECRET` (at least 32 characters), `CORS_ORIGIN`, `ADMIN_EMAIL`, and a strong `ADMIN_PASSWORD` (12+ characters). After applying the schema, configure `APP_DATABASE_URL` to use a dedicated non-superuser runtime login without `BYPASSRLS`; the API refuses to run with an RLS-bypassing database role. Do not share or commit `.env`.
-3. From the project root, run `npm install`, `npm --prefix backend install`, and `npm --prefix frontend install`. Then run `npm run db:init` to apply `sql/schema.sql` and all migrations, and `npm run admin:seed` to create/reset the initial administrator using the environment credentials. On an existing database, assign a class teacher and numeric year level to every current class before applying the timetable migration; the migration stops rather than inventing these values.
+3. From the project root, run `npm install`, `npm --prefix backend install`, and `npm --prefix frontend install`. Then run `npm run db:init` to apply `sql/schema.sql` and all migrations, and `npm run admin:seed` to create/reset the initial administrator using the environment credentials. Class names are required, but class-teacher assignments and year levels are optional and can be added later.
 4. Start the API with `npm run dev:backend` and the frontend with `npm run dev:frontend`. Frontend: `http://localhost:3000`; API: `http://localhost:5000`.
 5. Sign in with the `ADMIN_EMAIL` and `ADMIN_PASSWORD` you configured. Change credentials securely after initial setup.
 
@@ -27,6 +27,7 @@ In the Render API service, set `CORS_ORIGIN` and `FRONTEND_URL` to the deployed 
 - `npm run db:migrate:student-portal` adds result publication controls and student portal audit logging without deleting existing records.
 - `npm run db:migrate:school-name` updates the school record to its correct name without deleting existing records.
 - `npm run db:migrate:optional-class-year` allows classes to be created without a year level while preserving existing class assignments.
+- `npm run db:migrate:optional-class-teacher` allows classes to be created before assigning a teacher while preserving existing class assignments.
 - `npm run db:migrate:accountant-rls` adds the accountant finance role support, finance change audit history, and PostgreSQL row-level policies to finance tables.
 - `npm run db:migrate:timetable` applies or rechecks the timetable-management migrations independently.
 - `npm run admin:seed` creates the initial administrator; it does not print the password.

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { normalizeClassConfiguration } = require('../services/classConfiguration');
+const { normalizeClassTeacherAssignment } = require('../services/classTeacherAssignment');
 
 const getClasses = async (req, res, next) => {
   const { school_id, role, id: userId } = req.user;
@@ -27,30 +28,35 @@ const getClasses = async (req, res, next) => {
 };
 
 const createClass = async (req, res, next) => {
-  const { school_id, role, id: userId } = req.user;
+  const { school_id } = req.user;
   const { name, description, class_teacher_id, teacher_id, year_level, teaching_model, curriculum } = req.body;
-  const classTeacherId = Number(role === 'teacher' ? userId : (class_teacher_id || teacher_id));
+  let classTeacherAssignment;
   let classConfiguration;
 
-  if (!name?.trim() || !classTeacherId) {
-    return res.status(400).json({ message: 'Class name and one class teacher are required.' });
+  if (!name?.trim()) {
+    return res.status(400).json({ message: 'Class name is required.' });
+  }
+  try { classTeacherAssignment = normalizeClassTeacherAssignment(class_teacher_id !== undefined ? class_teacher_id : teacher_id); } catch (error) {
+    return res.status(400).json({ message: error.message });
   }
   try { classConfiguration = normalizeClassConfiguration({ year_level, teaching_model, curriculum }, { isNew: true }); } catch (error) {
     return res.status(400).json({ message: error.message });
   }
 
   try {
-    const teacher = await pool.query(
-      `SELECT id FROM users WHERE id = $1 AND school_id = $2 AND role = 'teacher' AND is_active = TRUE`,
-      [classTeacherId, school_id]
-    );
-    if (!teacher.rows.length) return res.status(400).json({ message: 'Select an active teacher from this school as the class teacher.' });
+    if (classTeacherAssignment.teacherId !== null) {
+      const teacher = await pool.query(
+        `SELECT id FROM users WHERE id = $1 AND school_id = $2 AND role = 'teacher' AND is_active = TRUE`,
+        [classTeacherAssignment.teacherId, school_id]
+      );
+      if (!teacher.rows.length) return res.status(400).json({ message: 'Select an active teacher from this school as the class teacher.' });
+    }
 
     const result = await pool.query(
       `INSERT INTO classes (school_id, name, description, teacher_id, class_teacher_id, year_level, teaching_model, curriculum)
        VALUES ($1, $2, $3, $4, $4, $5, $6, $7)
        RETURNING id, school_id, name, description, teacher_id, class_teacher_id, year_level, teaching_model, curriculum`,
-      [school_id, name.trim(), description || null, classTeacherId, classConfiguration.yearLevel, classConfiguration.teachingModel, classConfiguration.classCurriculum]
+      [school_id, name.trim(), description || null, classTeacherAssignment.teacherId, classConfiguration.yearLevel, classConfiguration.teachingModel, classConfiguration.classCurriculum]
     );
 
     res.status(201).json(result.rows[0]);
@@ -64,11 +70,14 @@ const createClass = async (req, res, next) => {
 
 const updateClass = async (req, res, next) => {
   const { school_id } = req.user;
-  const { name, description, class_teacher_id, year_level, teaching_model, curriculum } = req.body;
-  const classTeacherId = Number(class_teacher_id);
+  const { name, description, class_teacher_id, teacher_id, year_level, teaching_model, curriculum } = req.body;
+  let classTeacherAssignment;
 
-  if (!name?.trim() || !classTeacherId) {
-    return res.status(400).json({ message: 'Class name and one class teacher are required.' });
+  if (!name?.trim()) {
+    return res.status(400).json({ message: 'Class name is required.' });
+  }
+  try { classTeacherAssignment = normalizeClassTeacherAssignment(class_teacher_id !== undefined ? class_teacher_id : teacher_id); } catch (error) {
+    return res.status(400).json({ message: error.message });
   }
   let classConfiguration;
   try { classConfiguration = normalizeClassConfiguration({ year_level, teaching_model, curriculum }); } catch (error) {
@@ -76,20 +85,24 @@ const updateClass = async (req, res, next) => {
   }
 
   try {
-    const teacher = await pool.query(
-      `SELECT id FROM users WHERE id = $1 AND school_id = $2 AND role = 'teacher' AND is_active = TRUE`,
-      [classTeacherId, school_id]
-    );
-    if (!teacher.rows.length) return res.status(400).json({ message: 'Select an active teacher from this school as the class teacher.' });
+    if (classTeacherAssignment.teacherId !== null) {
+      const teacher = await pool.query(
+        `SELECT id FROM users WHERE id = $1 AND school_id = $2 AND role = 'teacher' AND is_active = TRUE`,
+        [classTeacherAssignment.teacherId, school_id]
+      );
+      if (!teacher.rows.length) return res.status(400).json({ message: 'Select an active teacher from this school as the class teacher.' });
+    }
 
     const result = await pool.query(
-      `UPDATE classes SET name = $1, description = $2, teacher_id = $3, class_teacher_id = $3,
-                          year_level = COALESCE($4, year_level),
-                          teaching_model = COALESCE($5, teaching_model),
-                          curriculum = COALESCE($6, curriculum)
-      WHERE id = $7 AND school_id = $8
+      `UPDATE classes SET name = $1, description = $2,
+                          teacher_id = CASE WHEN $3 THEN $4 ELSE teacher_id END,
+                          class_teacher_id = CASE WHEN $3 THEN $4 ELSE class_teacher_id END,
+                          year_level = COALESCE($5, year_level),
+                          teaching_model = COALESCE($6, teaching_model),
+                          curriculum = COALESCE($7, curriculum)
+      WHERE id = $8 AND school_id = $9
        RETURNING id, school_id, name, description, teacher_id, class_teacher_id, year_level, teaching_model, curriculum`,
-      [name.trim(), description || null, classTeacherId, classConfiguration.yearLevel, classConfiguration.teachingModel, classConfiguration.classCurriculum, req.params.id, school_id]
+      [name.trim(), description || null, classTeacherAssignment.provided, classTeacherAssignment.teacherId, classConfiguration.yearLevel, classConfiguration.teachingModel, classConfiguration.classCurriculum, req.params.id, school_id]
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Class not found.' });
     res.json(result.rows[0]);

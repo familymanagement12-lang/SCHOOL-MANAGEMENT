@@ -132,17 +132,17 @@ function Classes() {
                 required
               />
 
-              <label>Class Teacher *</label>
+              <label>Class Teacher (optional)</label>
               <select
                 value={formData.class_teacher_id}
                 onChange={(event) => setFormData({ ...formData, class_teacher_id: event.target.value })}
-                required
               >
-                <option value="">Select responsible teacher</option>
+                <option value="">Not assigned yet</option>
                 {teachers.map(teacher => (
                   <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
                 ))}
               </select>
+              <p>You can assign a teacher later by editing this class.</p>
 
               <label>Description</label>
               <textarea
