@@ -7,7 +7,7 @@ import { getSubjects } from '../api/subjects';
 const getInitials = (name) => {
   return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 };
-const getRoleLabel = (role) => ({ admin: 'Administrator', librarian: 'Librarian', inventory: 'Inventory', store: 'Inventory', teacher: 'Teacher', accountant: 'Accountant' }[role] || role);
+const getRoleLabel = (role) => ({ admin: 'Administrator', librarian: 'Librarian', inventory: 'Inventory', store: 'Inventory', storekeeper: 'Storekeeper', teacher: 'Teacher', accountant: 'Accountant' }[role] || role);
 
 function Users() {
   const user = JSON.parse(localStorage.getItem('user') || 'null');
@@ -172,7 +172,7 @@ function Users() {
           <div>
             <p className="eyebrow" style={{ color: '#dbeafe', fontWeight: '600' }}>System Management</p>
             <h1 style={{ color: '#ffffff', fontSize: '2.5rem', marginTop: '0.25rem', marginBottom: '0.5rem' }}>Users & Roles</h1>
-            <p style={{ color: '#f5f3ff', fontSize: '1.1rem', opacity: 0.9 }}>Manage administrator, accountant, teacher, librarian, and inventory accounts.</p>
+            <p style={{ color: '#f5f3ff', fontSize: '1.1rem', opacity: 0.9 }}>Manage administrator, accountant, teacher, librarian, inventory, and storekeeper accounts.</p>
           </div>
           {isAdmin && (
             <button className="btn-primary" onClick={() => handleOpenModal()} style={{ backgroundColor: '#ffffff', color: '#6d28d9', border: 'none', fontWeight: 'bold' }}>
@@ -288,6 +288,7 @@ function Users() {
                 <option value="accountant">Accountant</option>
                 <option value="librarian">Librarian</option>
                 <option value="inventory">Inventory</option>
+                <option value="storekeeper">Storekeeper</option>
               </select>
 
               {formData.role === 'teacher' && (

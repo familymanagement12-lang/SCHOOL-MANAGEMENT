@@ -74,7 +74,7 @@ const RoleBasedDashboard = () => {
   if (role === 'student') return <Navigate to="/student" replace />;
   if (role === 'accountant') return <FinanceDashboard />;
   if (role === 'teacher') return <TeacherDashboard />;
-  if (role === 'inventory' || role === 'store') return <Inventory />;
+  if (role === 'inventory' || role === 'store' || role === 'storekeeper') return <Inventory />;
   if (role === 'librarian') return <Library />;
   return <Dashboard />;
 };
@@ -112,7 +112,7 @@ function App() {
         <Route path="results" element={<Results />} />
         <Route path="transactions" element={<AllowedRoles roles={['admin', 'accountant']}><Transactions /></AllowedRoles>} />
         <Route path="finance-audit" element={<AllowedRoles roles={['admin', 'accountant']}><FinanceAudit /></AllowedRoles>} />
-        <Route path="inventory" element={<Inventory />} />
+        <Route path="inventory" element={<AllowedRoles roles={['admin', 'inventory', 'store', 'storekeeper', 'teacher']}><Inventory /></AllowedRoles>} />
         <Route path="employees" element={<Employees />} />
         <Route path="payroll" element={<AllowedRoles roles={['admin', 'accountant']}><Payroll /></AllowedRoles>} />
         <Route path="library" element={<Library />} />

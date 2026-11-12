@@ -8,7 +8,7 @@ const { getUsers, createUser, changePassword, resetUserPassword, updateUser, ver
 router.get('/verify', verifyEmail);
 
 // Only Admins can create users; Teachers and librarians can view users for assignment tasks.
-router.get('/', authenticate, authorizeRoles('admin', 'teacher', 'librarian', 'inventory'), getUsers);
+router.get('/', authenticate, authorizeRoles('admin', 'teacher', 'librarian', 'inventory', 'storekeeper'), getUsers);
 router.post('/', authenticate, authorizeRoles('admin'), createUser);
 router.put('/change-password', authenticate, changePassword);
 router.post('/:id/reset-password', authenticate, authorizeRoles('admin'), resetUserPassword);

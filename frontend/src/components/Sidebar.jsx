@@ -26,7 +26,7 @@ const sections = [
   {
     label: 'Operations',
     links: [
-      { path: '/inventory', label: 'School inventory', icon: Boxes, roles: ['admin', 'inventory', 'store', 'teacher'] },
+      { path: '/inventory', label: 'School store', icon: Boxes, roles: ['admin', 'inventory', 'store', 'storekeeper', 'teacher'] },
       { path: '/fees', label: 'Fees', icon: WalletCards, roles: ['admin', 'accountant'] },
       { path: '/transactions', label: 'Finance', icon: CircleDollarSign, roles: ['admin', 'accountant'] },
       { path: '/finance-audit', label: 'Finance audit trail', icon: FileBarChart2, roles: ['admin', 'accountant'] },
@@ -43,6 +43,7 @@ const roleLabels = {
   librarian: 'Librarian',
   inventory: 'Inventory',
   store: 'Inventory',
+  storekeeper: 'Storekeeper',
   teacher: 'Teacher',
   accountant: 'Accountant',
 };

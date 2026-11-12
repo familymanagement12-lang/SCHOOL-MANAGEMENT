@@ -8,7 +8,7 @@ function Layout() {
   const location = useLocation();
   const userStr = localStorage.getItem('user');
   const user = userStr ? JSON.parse(userStr) : null;
-  const roleLabel = { admin: 'Administrator', librarian: 'Librarian', inventory: 'Inventory', store: 'Inventory', teacher: 'Teacher', accountant: 'Accountant' }[user?.role] || 'Guest';
+  const roleLabel = { admin: 'Administrator', librarian: 'Librarian', inventory: 'Inventory', store: 'Inventory', storekeeper: 'Storekeeper', teacher: 'Teacher', accountant: 'Accountant' }[user?.role] || 'Guest';
   const [theme, setTheme] = useState(localStorage.getItem('sms_theme') || 'light');
   const [mobileOpen, setMobileOpen] = useState(false);
   const pageTitles = {
