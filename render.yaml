@@ -2,6 +2,7 @@ services:
   - type: web
     name: mccarthy-hill-api
     runtime: node
+    plan: free
     buildCommand: npm ci --prefix backend
     startCommand: npm --prefix backend start
     healthCheckPath: /
