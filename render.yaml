@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: mccarthy-hill-api
+    runtime: node
+    buildCommand: npm ci --prefix backend
+    startCommand: npm --prefix backend start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-6.1-sol
+
+  - type: web
+    name: mccarthy-hill-frontend
+    runtime: static
+    buildCommand: npm ci --prefix frontend && npm --prefix frontend run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

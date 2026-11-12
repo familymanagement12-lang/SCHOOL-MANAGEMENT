@@ -1,0 +1,9 @@
+node_modules/
+frontend/dist/
+backend/.env
+.env
+*.log
+.DS_Store
+.vscode/
+PREVIEW.html
+SECURITY_REVIEW.md

@@ -1,0 +1,18 @@
+const express = require('express');
+const { authenticate, authorize } = require('../middleware/auth');
+const c = require('../controllers/libraryController');
+const router = express.Router();
+router.use(authenticate);
+router.get('/dashboard', authorize(['admin', 'librarian', 'teacher']), c.dashboard);
+router.get('/books', authorize(['admin', 'librarian', 'teacher']), c.listBooks);
+router.get('/my-loans', authorize(['teacher']), c.myLoans);
+router.use(authorize(['admin', 'librarian']));
+router.get('/lookup/isbn/:isbn', c.lookupIsbn);
+router.post('/books', c.createBook);
+router.put('/books/:id', c.updateBook);
+router.get('/loans', c.listLoans);
+router.get('/loans/scan', c.scanLoans);
+router.get('/borrowers', c.borrowers);
+router.post('/loans', c.issueLoan);
+router.post('/loans/:id/return', c.returnLoan);
+module.exports = router;

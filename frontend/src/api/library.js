@@ -1,0 +1,12 @@
+import api from './api';
+export const getLibraryDashboard=()=>api.get('/library/dashboard');
+export const getBooks=(q='')=>api.get('/library/books',{params:{q}});
+export const lookupBookByIsbn=(isbn)=>api.get(`/library/lookup/isbn/${encodeURIComponent(isbn)}`);
+export const createBook=(data)=>api.post('/library/books',data);
+export const updateBook=(id,data)=>api.put(`/library/books/${id}`,data);
+export const getLoans=(status='all')=>api.get('/library/loans',{params:{status}});
+export const getActiveLoansByBookCode=(code)=>api.get('/library/loans/scan',{params:{code}});
+export const getMyLoans=()=>api.get('/library/my-loans');
+export const getBorrowers=()=>api.get('/library/borrowers');
+export const issueLoan=(data)=>api.post('/library/loans',data);
+export const returnLoan=(id)=>api.post(`/library/loans/${id}/return`);

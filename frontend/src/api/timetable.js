@@ -1,0 +1,25 @@
+import api from './api';
+
+export const getTimetable = (params = {}) => api.get('/timetable', { params });
+export const getTimetableMeta = (params = {}) => api.get('/timetable/meta', { params });
+export const getTimetableVersions = () => api.get('/timetable/versions');
+export const createTimetableVersion = (data) => api.post('/timetable/versions', data);
+export const copyPreviousTerm = (id, data) => api.post(`/timetable/versions/${id}/copy`, data);
+export const getTimetableValidation = (params = {}) => api.get('/timetable/validation', { params });
+export const getTimetableHealth = (params = {}) => api.get('/timetable/health', { params });
+export const getTimetableSuggestions = (params = {}) => api.get('/timetable/suggestions', { params });
+export const upsertClassTeacher = (data) => api.post('/timetable/class-teachers', data);
+export const upsertTimetableAssignment = (data) => api.post('/timetable/assignments', data);
+export const deleteTimetableAssignment = (id, data) => api.delete(`/timetable/assignments/${id}`, { data });
+export const upsertTimetableRequirement = (data) => api.post('/timetable/requirements', data);
+export const upsertTimetableRoom = (data) => api.post('/timetable/rooms', data);
+export const upsertTimetablePeriod = (data) => api.post('/timetable/periods', data);
+export const upsertTimetableAvailability = (data) => api.post('/timetable/availability', data);
+export const upsertWorkloadLimit = (data) => api.post('/timetable/workload', data);
+export const updateTimetableSettings = (data) => api.put('/timetable/settings', data);
+export const createTimetableEntry = (data) => api.post('/timetable', data);
+export const updateTimetableEntry = (id, data) => api.put(`/timetable/${id}`, data);
+export const deleteTimetableEntry = (id, data) => api.delete(`/timetable/${id}`, { data });
+export const setTimetableEntryLock = (id, data) => api.put(`/timetable/${id}/lock`, data);
+export const generateTimetable = (data) => api.post('/timetable/generate', data);
+export const publishTimetable = (data) => api.post('/timetable/publish', data);

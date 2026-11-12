@@ -1,0 +1,46 @@
+const express = require('express');
+const authRoutes = require('./auth');
+const studentRoutes = require('./students');
+const classRoutes = require('./classes');
+const attendanceRoutes = require('./attendance');
+const feesRoutes = require('./fees');
+const resultsRoutes = require('./results');
+const dashboardRoutes = require('./dashboard');
+const usersRoutes = require('./users');
+const announcementRoutes = require('./announcements');
+const subjectsRoutes = require('./subjects');
+const timetableRoutes = require('./timetable');
+const notificationsRoutes = require('./notifications');
+const settingsRoutes = require('./settings');
+const transactionsRoutes = require('./transactions');
+const inventoryRoutes = require('./inventory');
+const employeesRoutes = require('./employees');
+const payrollRoutes = require('./payroll');
+const libraryRoutes = require('./library');
+const aiRoutes = require('./ai');
+const studentPortalRoutes = require('./studentPortal');
+
+const router = express.Router();
+
+router.use('/auth', authRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/students', studentRoutes);
+router.use('/classes', classRoutes);
+router.use('/attendance', attendanceRoutes);
+router.use('/fees', feesRoutes);
+router.use('/results', resultsRoutes);
+router.use('/users', usersRoutes);
+router.use('/announcements', announcementRoutes);
+router.use('/subjects', subjectsRoutes);
+router.use('/timetable', timetableRoutes);
+router.use('/notifications', notificationsRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/transactions', transactionsRoutes);
+router.use('/inventory', inventoryRoutes);
+router.use('/employees', employeesRoutes);
+router.use('/payroll', payrollRoutes);
+router.use('/library', libraryRoutes);
+router.use('/ai', aiRoutes);
+router.use('/student-portal', studentPortalRoutes);
+
+module.exports = router;
