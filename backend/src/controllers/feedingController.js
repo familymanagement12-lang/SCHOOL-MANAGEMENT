@@ -933,22 +933,29 @@ const getTuckshopDailyReconciliation = async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT $2::DATE::TEXT AS reconciliation_date,
-              COUNT(s.id)::INTEGER AS transaction_count,
-              COALESCE(SUM(s.total_amount) FILTER (WHERE s.payment_method = 'cash'), 0) AS expected_cash,
-              COALESCE(SUM(s.total_amount) FILTER (WHERE s.payment_method = 'mobile_money'), 0) AS expected_mobile_money,
-              COALESCE(SUM(s.total_amount) FILTER (WHERE s.payment_method NOT IN ('cash', 'mobile_money')), 0) AS other_methods,
-              COALESCE(SUM(s.total_amount), 0) AS total_sales,
+              COALESCE(s.transaction_count, 0)::INTEGER AS transaction_count,
+              COALESCE(s.expected_cash, 0) AS expected_cash,
+              COALESCE(s.expected_mobile_money, 0) AS expected_mobile_money,
+              COALESCE(s.other_methods, 0) AS other_methods,
+              COALESCE(s.total_sales, 0) AS total_sales,
               r.cash_counted, r.notes, u.name AS reconciled_by,
-              CASE WHEN r.id IS NULL THEN NULL ELSE r.cash_counted -
-                COALESCE(SUM(s.total_amount) FILTER (WHERE s.payment_method = 'cash'), 0) END AS cash_variance,
+              CASE WHEN r.id IS NULL THEN NULL ELSE r.cash_counted - COALESCE(s.expected_cash, 0) END AS cash_variance,
               CASE WHEN r.id IS NULL THEN 'unreconciled' ELSE 'reconciled' END AS status
-       FROM tuckshop_sales s
-       FULL JOIN tuckshop_daily_reconciliations r
-         ON r.school_id = $1 AND r.reconciliation_date = $2::DATE
+       FROM (SELECT $2::DATE AS reconciliation_date) requested
+       LEFT JOIN (
+         SELECT sale_date, COUNT(*)::INTEGER AS transaction_count,
+                COALESCE(SUM(total_amount) FILTER (WHERE payment_method = 'cash'), 0) AS expected_cash,
+                COALESCE(SUM(total_amount) FILTER (WHERE payment_method = 'mobile_money'), 0) AS expected_mobile_money,
+                COALESCE(SUM(total_amount) FILTER (WHERE payment_method NOT IN ('cash', 'mobile_money')), 0) AS other_methods,
+                COALESCE(SUM(total_amount), 0) AS total_sales
+         FROM tuckshop_sales
+         WHERE school_id = $1 AND sale_date = $2::DATE
+         GROUP BY sale_date
+       ) s ON s.sale_date = requested.reconciliation_date
+       LEFT JOIN tuckshop_daily_reconciliations r
+         ON r.school_id = $1 AND r.reconciliation_date = requested.reconciliation_date
        LEFT JOIN users u ON u.id = r.reconciled_by
-       WHERE (s.school_id = $1 AND s.sale_date = $2::DATE)
-          OR r.id IS NOT NULL
-       GROUP BY r.id, u.name`,
+       `,
       [req.user.school_id, reconciliationDate]
     );
     res.json(result.rows[0] || {
