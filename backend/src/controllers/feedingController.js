@@ -7,6 +7,27 @@ const {
   moneyToCents,
   parseDate,
 } = require('../services/feedingCoverage');
+const { getFigureAccess, getWorkbookAccess } = require('../services/feedingWorkbookAccess');
+
+const WORKBOOK_ACCESS_PERMISSIONS = [
+  'feeding.reports.read',
+  'tuckshop.reports.read',
+  'feeding.market.read',
+  'feeding.market.manage',
+  'feeding.marketing.read',
+  'feeding.marketing.manage',
+  'feeding.import.review',
+];
+
+async function getWorkbookPermissions(req) {
+  if (req.user.role === 'admin') return new Set();
+  const result = await pool.query(
+    `SELECT permission FROM user_permissions
+     WHERE school_id = $1 AND user_id = $2 AND permission = ANY($3::TEXT[])`,
+    [req.user.school_id, req.user.id, WORKBOOK_ACCESS_PERMISSIONS]
+  );
+  return new Set(result.rows.map((row) => row.permission));
+}
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const receiptNumber = (prefix) => `${prefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
@@ -710,12 +731,15 @@ const getFeedingReport = async (req, res, next) => {
 
 const getImportedWorkbooks = async (req, res, next) => {
   try {
+    const granted = await getWorkbookPermissions(req);
+    const fileNames = getWorkbookAccess(granted, req.user.role === 'admin');
+    if (!fileNames.length) return res.json([]);
     const result = await pool.query(
       `SELECT id, file_name, sheet_summary, imported_at, octet_length(file_data)::INTEGER AS file_size
        FROM feeding_tuckshop_imported_workbooks
-       WHERE school_id = $1
+       WHERE school_id = $1 AND file_name = ANY($2::TEXT[])
        ORDER BY imported_at DESC, id DESC`,
-      [req.user.school_id]
+      [req.user.school_id, fileNames]
     );
     res.json(result.rows);
   } catch (error) {
@@ -725,23 +749,9 @@ const getImportedWorkbooks = async (req, res, next) => {
 
 const getImportedFinanceFigures = async (req, res, next) => {
   try {
-    const granted = req.user.role === 'admin'
-      ? new Set(['feeding.reports.read', 'tuckshop.reports.read', 'feeding.market.read', 'feeding.market.manage', 'feeding.marketing.read', 'feeding.marketing.manage'])
-      : new Set((await pool.query(
-        `SELECT permission FROM user_permissions
-         WHERE school_id = $1 AND user_id = $2
-           AND permission IN (
-             'feeding.reports.read', 'tuckshop.reports.read',
-             'feeding.market.read', 'feeding.market.manage',
-             'feeding.marketing.read', 'feeding.marketing.manage'
-           )`,
-        [req.user.school_id, req.user.id]
-      )).rows.map((row) => row.permission));
-    const modules = [];
-    if (granted.has('feeding.reports.read') || granted.has('feeding.market.read') || granted.has('feeding.market.manage')) modules.push('feeding');
-    if (granted.has('feeding.reports.read') || granted.has('feeding.marketing.read') || granted.has('feeding.marketing.manage')) modules.push('marketing');
-    if (granted.has('tuckshop.reports.read') || granted.has('feeding.market.read') || granted.has('feeding.market.manage')) modules.push('tuckshop');
-    if (!modules.length) return res.json({ entries: [], totals: [] });
+    const granted = await getWorkbookPermissions(req);
+    const { modules, sourceFiles } = getFigureAccess(granted, req.user.role === 'admin');
+    if (!modules.length || !sourceFiles.length) return res.json({ entries: [], totals: [] });
 
     const [entries, totals] = await Promise.all([
       pool.query(
@@ -749,18 +759,20 @@ const getImportedFinanceFigures = async (req, res, next) => {
                 sheet_name, source_row, source_column, counts_in_totals, support_reason
          FROM feeding_tuckshop_workbook_figures
          WHERE school_id = $1 AND module = ANY($2::TEXT[])
+           AND source_file = ANY($3::TEXT[])
          ORDER BY counts_in_totals DESC, id`,
-        [req.user.school_id, modules]
+        [req.user.school_id, modules, sourceFiles]
       ),
       pool.query(
         `SELECT module, entry_type, COUNT(*)::INTEGER AS count,
                 COALESCE(SUM(amount), 0) AS total
          FROM feeding_tuckshop_workbook_figures
          WHERE school_id = $1 AND module = ANY($2::TEXT[])
+           AND source_file = ANY($3::TEXT[])
            AND counts_in_totals AND entry_type IN ('income', 'expense')
          GROUP BY module, entry_type
          ORDER BY module, entry_type`,
-        [req.user.school_id, modules]
+        [req.user.school_id, modules, sourceFiles]
       ),
     ]);
     res.json({ entries: entries.rows, totals: totals.rows });
@@ -772,11 +784,14 @@ const getImportedFinanceFigures = async (req, res, next) => {
 const downloadImportedWorkbook = async (req, res, next) => {
   if (!/^\d+$/.test(req.params.id)) return res.status(404).json({ message: 'Workbook not found.' });
   try {
+    const granted = await getWorkbookPermissions(req);
+    const fileNames = getWorkbookAccess(granted, req.user.role === 'admin');
+    if (!fileNames.length) return res.status(404).json({ message: 'Workbook not found.' });
     const result = await pool.query(
       `SELECT file_name, file_data
        FROM feeding_tuckshop_imported_workbooks
-       WHERE school_id = $1 AND id = $2`,
-      [req.user.school_id, req.params.id]
+       WHERE school_id = $1 AND id = $2 AND file_name = ANY($3::TEXT[])`,
+      [req.user.school_id, req.params.id, fileNames]
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Workbook not found.' });
     const workbook = result.rows[0];
