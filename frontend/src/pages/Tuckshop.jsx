@@ -10,6 +10,7 @@ import { hasOperationalPermission } from '../utils/operationalPermissions';
 import { downloadOperationsReport } from '../utils/feedingReportWorkbook';
 import FeedingHistoricalFinance from '../components/FeedingHistoricalFinance';
 import FeedingWorkbookArchive from '../components/FeedingWorkbookArchive';
+import ImportedWorkbookHistory from '../components/ImportedWorkbookHistory';
 
 const today = () => new Date().toLocaleDateString('en-CA');
 const money = (value) => `GH₵${Number(value || 0).toFixed(2)}`;
@@ -124,7 +125,7 @@ function Tuckshop() {
       setSaleKey(newIdempotencyKey());
       setSaleReceipt(response.data);
       setCart({});
-      setNotice(`Sale ${response.data.receipt_number} completed and recorded in Income & Expenditure.`);
+      setNotice(`Sale ${response.data.receipt_number} completed and recorded in the separate Tuckshop operational account.`);
       await refresh();
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to complete sale.');
@@ -244,7 +245,7 @@ function Tuckshop() {
     try {
       await approveKitchenPurchase(purchase.id);
       await refresh();
-      setNotice(`Purchase ${purchase.id} approved and posted to Income & Expenditure.`);
+      setNotice(`Purchase ${purchase.id} approved and reflected in the separate operational records and stock.`);
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to approve kitchen purchase.');
     } finally {
@@ -591,6 +592,7 @@ function Tuckshop() {
               {!report.operationalLedgerEntries.length && <p className="muted-copy">No operational income or expenditure was recorded in this date range.</p>}
             </>}
             <FeedingHistoricalFinance modules={['tuckshop']} />
+            <ImportedWorkbookHistory modules={['purchases']} />
             <FeedingWorkbookArchive />
             {report?.purchaseDetails && <div className="table-wrap">
               <h3>Purchase detail</h3>

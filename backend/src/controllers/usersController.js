@@ -2,7 +2,7 @@ const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Resend } = require('resend');
-const { OPERATIONAL_PERMISSIONS, DEFAULT_FEEDING_TUCKSHOP_PERMISSIONS } = require('../services/operationalPermissions');
+const { OPERATIONAL_PERMISSIONS } = require('../services/operationalPermissions');
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const getUsers = async (req, res, next) => {
@@ -35,7 +35,7 @@ const createUser = async (req, res, next) => {
   if (!['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) {
     return res.status(400).json({ message: 'Invalid user role.' });
   }
-  const permissions = normalizePermissions(role, req.body.permissions);
+  const permissions = normalizePermissions(req.body.permissions);
   if (!permissions) return res.status(400).json({ message: 'One or more operational permissions are invalid.' });
 
   try {
@@ -158,9 +158,9 @@ const updateUser = async (req, res, next) => {
   const { id } = req.params;
   const { name, email, role, is_active, subjects } = req.body;
   if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
-  const permissions = role === 'feeding_tuckshop_officer'
-    ? normalizePermissions(role)
-    : req.body.permissions === undefined ? null : normalizePermissions(role, req.body.permissions);
+  const permissions = role || req.body.permissions !== undefined
+    ? normalizePermissions(req.body.permissions)
+    : null;
   if (permissions === null && req.body.permissions !== undefined) return res.status(400).json({ message: 'One or more operational permissions are invalid.' });
 
   try {
@@ -244,10 +244,8 @@ const deleteUser = async (req, res, next) => {
 
 module.exports = { getUsers, createUser, changePassword, resetUserPassword, updateUser, verifyEmail, deleteUser };
 
-function normalizePermissions(role, requestedPermissions) {
-  const permissions = role === 'feeding_tuckshop_officer'
-    ? DEFAULT_FEEDING_TUCKSHOP_PERMISSIONS
-    : (requestedPermissions === undefined ? [] : requestedPermissions);
+function normalizePermissions(requestedPermissions) {
+  const permissions = requestedPermissions === undefined ? [] : requestedPermissions;
   if (!Array.isArray(permissions) || permissions.some((permission) => !OPERATIONAL_PERMISSIONS.includes(permission))) {
     return null;
   }

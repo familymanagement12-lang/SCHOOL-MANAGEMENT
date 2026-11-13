@@ -10,6 +10,7 @@ import { hasOperationalPermission } from '../utils/operationalPermissions';
 import { downloadDailyFeedingRegister, downloadOperationsReport } from '../utils/feedingReportWorkbook';
 import FeedingHistoricalFinance from '../components/FeedingHistoricalFinance';
 import FeedingWorkbookArchive from '../components/FeedingWorkbookArchive';
+import ImportedWorkbookHistory from '../components/ImportedWorkbookHistory';
 
 const today = () => new Date().toLocaleDateString('en-CA');
 const money = (value) => `GH₵${Number(value || 0).toFixed(2)}`;
@@ -630,6 +631,7 @@ function Feeding() {
               </>
             )}
             <FeedingHistoricalFinance modules={['feeding', 'marketing']} />
+            <ImportedWorkbookHistory modules={['lunch']} />
             <FeedingWorkbookArchive />
             {report?.feedingWeeklyCollections && (
               <>

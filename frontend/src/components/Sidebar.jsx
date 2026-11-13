@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Activity, Archive, BookOpen, CalendarDays, CircleDollarSign, ClipboardCheck,
   FileBarChart2, GraduationCap, LayoutDashboard, Megaphone, Settings, Users, Sparkles,
-  WalletCards, X, Boxes, UtensilsCrossed, ShoppingBag
+  WalletCards, X, Boxes, UtensilsCrossed, ShoppingBag, FileInput
 } from 'lucide-react';
 import { getSettings } from '../api/settings';
 import { hasOperationalPermission } from '../utils/operationalPermissions';
@@ -35,8 +35,16 @@ const sections = [
       { path: '/payroll', label: 'Payroll', icon: Activity, roles: ['admin', 'accountant'] },
       { path: '/users', label: 'Teachers & roles', icon: Users, roles: ['admin', 'teacher'] },
       { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
-      { path: '/feeding', label: 'Feeding', icon: UtensilsCrossed, permissions: ['feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read'] },
-      { path: '/tuckshop', label: 'Tuckshop', icon: ShoppingBag, permissions: ['tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.create', 'tuckshop.sales.read', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read'] },
+    ],
+  },
+  {
+    label: 'Feeding, Kitchen & Tuckshop',
+    links: [
+      { path: '/feeding', label: 'Lunch Register & Feeding', icon: UtensilsCrossed, permissions: ['feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read'] },
+      { path: '/tuckshop', label: 'Tuckshop & Purchases', icon: ShoppingBag, permissions: ['tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.create', 'tuckshop.sales.read', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read'] },
+      { path: '/feeding/market-stock', label: 'Market Stock Register', icon: Boxes, permissions: ['feeding.market.read', 'feeding.market.manage'] },
+      { path: '/feeding/marketing', label: 'Feeding & Marketing', icon: FileBarChart2, permissions: ['feeding.marketing.read', 'feeding.marketing.manage'] },
+      { path: '/feeding/imports', label: 'Workbook Import Centre', icon: FileInput, permissions: ['feeding.import.review'] },
     ],
   },
 ];

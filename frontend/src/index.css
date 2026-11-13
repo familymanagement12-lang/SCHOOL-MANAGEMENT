@@ -1285,3 +1285,67 @@ tbody tr:hover { background-color: #f8fafc; }
   body:has(.feeding-receipt) .feeding-receipt { position: fixed !important; inset: 0 !important; margin: 0 !important; box-shadow: none !important; }
   body:has(.feeding-receipt) .feeding-receipt .modal-actions { display: none !important; }
 }
+
+.feeding-import-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+.feeding-import-form label,
+.feeding-import-filters label {
+  display: grid;
+  gap: 6px;
+  color: var(--workspace-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.feeding-import-file small,
+.feeding-import-table small { color: var(--workspace-muted); font-weight: 500; }
+.feeding-import-actions,
+.feeding-import-row-actions,
+.feeding-import-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+}
+.feeding-import-filters { margin: 14px 0; }
+.feeding-import-filters label:first-child { min-width: min(100%, 300px); }
+.feeding-import-filters > span { margin-left: auto; color: var(--workspace-muted); font-size: 12px; }
+.feeding-import-table { min-width: 860px; }
+.feeding-import-table td { vertical-align: top; }
+.feeding-import-table details summary { max-width: 380px; cursor: pointer; color: var(--workspace-ink); line-height: 1.5; }
+.feeding-import-cells {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  max-width: 560px;
+  padding: 10px 0;
+}
+.feeding-import-cells label { display: grid; gap: 4px; color: var(--workspace-muted); font-size: 10px; font-weight: 800; }
+.feeding-import-cells input { width: 100%; min-width: 0; }
+.feeding-import-cells label small { overflow-wrap: anywhere; }
+.import-issue { margin: 0 0 6px; color: #9a5c08; font-size: 11px; line-height: 1.5; }
+.import-row-duplicate .import-issue,
+.import-row-rejected .import-issue { color: #a33b36; }
+.feeding-import-row-actions { align-items: stretch; flex-direction: column; min-width: 135px; }
+.feeding-import-row-actions button,
+.feeding-import-actions button,
+.pagination-controls button,
+.data-panel .panel-heading > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.pagination-controls { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 16px; }
+.pagination-controls span { color: var(--workspace-muted); font-size: 12px; }
+.feeding-import-center .success-message { padding: 10px 12px; color: #236043; background: #edf7f0; border: 1px solid #cfe7d5; border-radius: 6px; }
+.feeding-workbook-page .module-hero p:not(.eyebrow) { max-width: 850px; margin-top: 8px; }
+@media (max-width: 700px) {
+  .feeding-import-filters { align-items: stretch; flex-direction: column; }
+  .feeding-import-filters > span { margin-left: 0; }
+  .feeding-import-actions { align-items: stretch; flex-direction: column; }
+}
+@media print {
+  body:has(.feeding-workbook-page) .app-sidebar,
+  body:has(.feeding-workbook-page) .feeding-workbook-archive,
+  body:has(.feeding-workbook-page) .feeding-workbook-page .module-hero { display: none !important; }
+  body:has(.feeding-workbook-page) .feeding-workbook-page { padding: 0 !important; }
+}

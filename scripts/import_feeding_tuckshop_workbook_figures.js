@@ -405,6 +405,25 @@ function captureHeading(sheet, headerRow, itemColumn, amountColumn) {
   return [...new Set(parts)].join(' ').replace(/\s+/g, ' ').trim();
 }
 
+function validateFigureRecords(records) {
+  const importKeys = new Set();
+  for (const record of records) {
+    if (!record.module || !['feeding', 'tuckshop', 'marketing'].includes(record.module)
+        || !['income', 'expense', 'summary'].includes(record.entryType)
+        || !record.sourceFile || !/^[0-9a-f]{64}$/.test(record.sourceHash || '')
+        || !record.sheetName || !record.importKey
+        || !Number.isInteger(record.sourceRow) || record.sourceRow < 1 || !record.sourceColumn
+        || !Number.isFinite(Number(record.amount)) || Number(record.amount) <= 0) {
+      throw new Error(`Invalid figure or missing source/import metadata in ${record.sourceFile || 'an input workbook'}.`);
+    }
+    if (importKeys.has(record.importKey)) {
+      throw new Error(`Duplicate source figure detected: ${record.sourceFile}, ${record.sheetName}, row ${record.sourceRow}, column ${record.sourceColumn}.`);
+    }
+    importKeys.add(record.importKey);
+  }
+  return records.length;
+}
+
 async function inspectWorkbook(filePath) {
   const fileData = fs.readFileSync(filePath);
   const workbook = new ExcelJS.Workbook();
@@ -417,8 +436,9 @@ async function inspectWorkbook(filePath) {
 }
 
 async function main() {
-  const dryRun = process.argv.includes('--dry-run');
-  const filePaths = process.argv.slice(2).filter((argument) => argument !== '--dry-run');
+  const confirmed = process.argv.includes('--confirm');
+  const dryRun = process.argv.includes('--dry-run') || !confirmed;
+  const filePaths = process.argv.slice(2).filter((argument) => !['--dry-run', '--confirm'].includes(argument));
   if (filePaths.length !== expectedFiles.length) {
     throw new Error(`Pass exactly ${expectedFiles.length} workbook paths, in any order.`);
   }
@@ -449,6 +469,7 @@ async function main() {
     }
   }
   if (!records.length) throw new Error('No financial figures were found in the workbooks.');
+  validateFigureRecords(records);
 
   const totals = new Map();
   const fileTotals = new Map();
@@ -465,7 +486,17 @@ async function main() {
     fileSummary.amount += Number(record.amount);
     fileTotals.set(fileKey, fileSummary);
   }
-  console.log(`${dryRun ? 'Parsed' : 'Prepared'} ${records.length} financial figures.`);
+  console.log(`${dryRun ? 'Previewed' : 'Prepared'} ${records.length} financial figures from ${files.length} workbooks.`);
+  for (const file of files) {
+    const nonemptyRows = file.workbook.worksheets.reduce((total, sheet) => {
+      let sheetRows = 0;
+      sheet.eachRow((row) => {
+        if (row.values.some((value) => value !== null && value !== undefined && String(value).trim() !== '')) sheetRows += 1;
+      });
+      return total + sheetRows;
+    }, 0);
+    console.log(`${file.name}: ${file.workbook.worksheets.length} worksheets, ${nonemptyRows} non-empty rows`);
+  }
   for (const [key, summary] of totals) {
     console.log(`${key}: ${summary.count} figures, GH₵${summary.amount.toFixed(2)}`);
   }
@@ -474,7 +505,10 @@ async function main() {
       console.log(`${key}: ${summary.count} figures, GH₵${summary.amount.toFixed(2)}`);
     }
   }
-  if (dryRun) return;
+  if (dryRun) {
+    console.log('Preview only: no records were saved. Review the figures above, then rerun the same command with --confirm to save.');
+    return;
+  }
 
   const connectionString = process.env.APP_DATABASE_URL
     || process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
@@ -545,4 +579,5 @@ module.exports = {
   importMarketDetail,
   importTermLedger,
   numericValue,
+  validateFigureRecords,
 };

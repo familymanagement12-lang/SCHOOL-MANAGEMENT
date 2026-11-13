@@ -344,7 +344,7 @@ const getFeedingReport = async (req, res, next) => {
     return res.status(400).json({ message: 'Provide a valid report date range.' });
   }
   try {
-    const granted = ['admin', 'feeding_tuckshop_officer'].includes(req.user.role)
+    const granted = req.user.role === 'admin'
       ? new Set(['feeding.reports.read', 'tuckshop.reports.read'])
       : new Set((await pool.query(
         `SELECT permission FROM user_permissions
@@ -662,17 +662,22 @@ const getImportedWorkbooks = async (req, res, next) => {
 
 const getImportedFinanceFigures = async (req, res, next) => {
   try {
-    const granted = ['admin', 'feeding_tuckshop_officer'].includes(req.user.role)
-      ? new Set(['feeding.reports.read', 'tuckshop.reports.read'])
+    const granted = req.user.role === 'admin'
+      ? new Set(['feeding.reports.read', 'tuckshop.reports.read', 'feeding.market.read', 'feeding.market.manage', 'feeding.marketing.read', 'feeding.marketing.manage'])
       : new Set((await pool.query(
         `SELECT permission FROM user_permissions
          WHERE school_id = $1 AND user_id = $2
-           AND permission IN ('feeding.reports.read', 'tuckshop.reports.read')`,
+           AND permission IN (
+             'feeding.reports.read', 'tuckshop.reports.read',
+             'feeding.market.read', 'feeding.market.manage',
+             'feeding.marketing.read', 'feeding.marketing.manage'
+           )`,
         [req.user.school_id, req.user.id]
       )).rows.map((row) => row.permission));
     const modules = [];
-    if (granted.has('feeding.reports.read')) modules.push('feeding', 'marketing');
-    if (granted.has('tuckshop.reports.read')) modules.push('tuckshop');
+    if (granted.has('feeding.reports.read') || granted.has('feeding.market.read') || granted.has('feeding.market.manage')) modules.push('feeding');
+    if (granted.has('feeding.reports.read') || granted.has('feeding.marketing.read') || granted.has('feeding.marketing.manage')) modules.push('marketing');
+    if (granted.has('tuckshop.reports.read') || granted.has('feeding.market.read') || granted.has('feeding.market.manage')) modules.push('tuckshop');
     if (!modules.length) return res.json({ entries: [], totals: [] });
 
     const [entries, totals] = await Promise.all([
@@ -1377,7 +1382,7 @@ const saveKitchenStock = async (req, res, next) => {
 
 const getKitchenPurchases = async (req, res, next) => {
   try {
-    const permittedPurposes = ['admin', 'feeding_tuckshop_officer'].includes(req.user.role)
+    const permittedPurposes = req.user.role === 'admin'
       ? ['feeding', 'kitchen']
       : (await pool.query(
         `SELECT permission FROM user_permissions

@@ -8,9 +8,28 @@ const {
   importMarketDetail,
   importTermLedger,
   numericValue,
+  validateFigureRecords,
 } = require('../../../scripts/import_feeding_tuckshop_workbook_figures');
 
 const sourceFile = { hash: 'a'.repeat(64), name: 'test.xlsx' };
+
+test('import preview validation requires source provenance and rejects duplicate source figures', () => {
+  const record = {
+    module: 'feeding',
+    entryType: 'income',
+    sourceFile: sourceFile.name,
+    sourceHash: sourceFile.hash,
+    sheetName: 'Sheet 1',
+    sourceRow: 2,
+    sourceColumn: 'B',
+    amount: '10.00',
+    importKey: 'same-key',
+  };
+  assert.equal(validateFigureRecords([record]), 1);
+  assert.throws(() => validateFigureRecords([record, record]), /Duplicate source figure detected/);
+  assert.throws(() => validateFigureRecords([{ ...record, sourceColumn: '' }]), /missing source\/import metadata/);
+  assert.throws(() => validateFigureRecords([{ ...record, importKey: '' }]), /missing source\/import metadata/);
+});
 
 test('workbook amount parser reads numeric and additive text amounts without treating labels as money', () => {
   assert.equal(numericValue({ value: 12.5 }), 12.5);

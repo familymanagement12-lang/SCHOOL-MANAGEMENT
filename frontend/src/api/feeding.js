@@ -24,6 +24,32 @@ export const downloadFeedingWorkbook = (id, fileName) => api.get(`/feeding/workb
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
+export const getWorkbookImports = () => api.get('/feeding/imports');
+export const getWorkbookImport = (id) => api.get(`/feeding/imports/${id}`);
+export const previewWorkbookImport = (file, module, academic_year, term) => {
+  const form = new FormData();
+  form.append('workbook', file);
+  form.append('module', module);
+  if (academic_year) form.append('academic_year', academic_year);
+  if (term) form.append('term', term);
+  return api.post('/feeding/imports/preview', form);
+};
+export const reviewWorkbookImportRow = (importId, rowId, data) => api.put(
+  `/feeding/imports/${importId}/rows/${rowId}`,
+  data
+);
+export const confirmWorkbookImport = (importId) => api.post(`/feeding/imports/${importId}/confirm`);
+export const downloadWorkbookImport = (id) => api.get(`/feeding/imports/${id}/download`, {
+  responseType: 'blob',
+}).then((response) => {
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `feeding-workbook-import-${id}.xlsx`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+export const getImportedWorkbookRows = (module) => api.get(`/feeding/history/${module}`);
 export const getShoppingAdvances = () => api.get('/feeding/advances');
 export const createShoppingAdvance = (data) => api.post('/feeding/advances', data);
 export const reconcileShoppingAdvance = (id, returned_amount) => api.put(`/feeding/advances/${id}/reconcile`, { returned_amount });

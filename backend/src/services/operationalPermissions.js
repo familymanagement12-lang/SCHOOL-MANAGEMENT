@@ -13,6 +13,14 @@ const OPERATIONAL_PERMISSIONS = [
   'feeding.purchases.approve',
   'feeding.advances.manage',
   'feeding.reports.read',
+  'feeding.market.read',
+  'feeding.market.manage',
+  'feeding.marketing.read',
+  'feeding.marketing.manage',
+  'feeding.import.review',
+  'feeding.import.confirm',
+  'feeding.export',
+  'feeding.settings.manage',
   'tuckshop.access',
   'tuckshop.products.read',
   'tuckshop.products.manage',
@@ -25,8 +33,7 @@ const OPERATIONAL_PERMISSIONS = [
   'tuckshop.purchases.approve',
   'tuckshop.sales.reconcile',
   'tuckshop.reports.read',
+  'tuckshop.settings.manage',
 ];
 
-const DEFAULT_FEEDING_TUCKSHOP_PERMISSIONS = OPERATIONAL_PERMISSIONS;
-
-module.exports = { OPERATIONAL_PERMISSIONS, DEFAULT_FEEDING_TUCKSHOP_PERMISSIONS };
+module.exports = { OPERATIONAL_PERMISSIONS };

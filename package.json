@@ -17,6 +17,7 @@
     "db:migrate:feeding-market-reconciliation": "node scripts/migrate_feeding_market_reconciliation.js",
     "db:migrate:feeding-workbook-archive": "node scripts/migrate_feeding_workbook_archive.js",
     "db:migrate:feeding-workbook-figures": "node scripts/migrate_feeding_workbook_figures.js",
+    "db:migrate:feeding-workbook-review-imports": "node scripts/migrate_feeding_workbook_review_imports.js",
     "db:import:feeding-workbooks": "node scripts/import_feeding_tuckshop_workbooks.js",
     "db:import:feeding-workbook-figures": "node scripts/import_feeding_tuckshop_workbook_figures.js",
     "db:migrate:fee-overrides-staff-attendance": "node scripts/migrate_fee_overrides_staff_attendance.js",

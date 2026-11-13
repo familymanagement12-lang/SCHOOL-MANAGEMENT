@@ -3,6 +3,44 @@ import { getUsers, registerUser, resetUserPassword, updateUser, deleteUser } fro
 import { getClasses } from '../api/classes';
 import { getSubjects } from '../api/subjects';
 
+const operationalPermissions = [
+  ['feeding.access', 'Access lunch register'],
+  ['feeding.students.read', 'Search students'],
+  ['feeding.rates.read', 'View class feeding rates'],
+  ['feeding.rates.manage', 'Manage class feeding rates'],
+  ['feeding.payments.read', 'View feeding payments'],
+  ['feeding.payments.create', 'Record feeding payments'],
+  ['feeding.register.read', 'View daily feeding register'],
+  ['feeding.register.manage', 'Manage daily feeding register'],
+  ['feeding.calendar.manage', 'Manage school feeding calendar'],
+  ['feeding.purchases.read', 'View feeding purchases'],
+  ['feeding.purchases.create', 'Record feeding purchases'],
+  ['feeding.purchases.approve', 'Approve feeding purchases'],
+  ['feeding.advances.manage', 'Issue and reconcile shopping advances'],
+  ['feeding.reports.read', 'View feeding reports'],
+  ['feeding.market.read', 'View market stock register'],
+  ['feeding.market.manage', 'Manage market stock register'],
+  ['feeding.marketing.read', 'View feeding and marketing reports'],
+  ['feeding.marketing.manage', 'Manage feeding and marketing records'],
+  ['feeding.import.review', 'Review historical workbook imports'],
+  ['feeding.import.confirm', 'Confirm historical workbook imports'],
+  ['feeding.export', 'Export operational reports'],
+  ['feeding.settings.manage', 'Manage feeding settings'],
+  ['tuckshop.access', 'Access tuckshop'],
+  ['tuckshop.products.read', 'View tuckshop products'],
+  ['tuckshop.products.manage', 'Manage tuckshop products'],
+  ['tuckshop.sales.read', 'View tuckshop sales'],
+  ['tuckshop.sales.create', 'Record tuckshop sales'],
+  ['tuckshop.stock.read', 'View tuckshop stock'],
+  ['tuckshop.stock.manage', 'Manage tuckshop stock'],
+  ['tuckshop.purchases.read', 'View tuckshop purchases'],
+  ['tuckshop.purchases.create', 'Record tuckshop purchases'],
+  ['tuckshop.purchases.approve', 'Approve tuckshop purchases'],
+  ['tuckshop.sales.reconcile', 'Reconcile tuckshop sales'],
+  ['tuckshop.reports.read', 'View tuckshop reports'],
+  ['tuckshop.settings.manage', 'Manage tuckshop settings'],
+];
+
 // Helper to extract initials for user avatars
 const getInitials = (name) => {
   return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -26,6 +64,7 @@ function Users() {
     role: 'teacher',
     is_active: true,
     subjects: '',
+    permissions: [],
   });
 
   useEffect(() => {
@@ -63,10 +102,11 @@ function Users() {
         role: user.role,
         is_active: user.is_active !== false,
         subjects: user.subjects ? user.subjects.join(', ') : '',
+        permissions: user.permissions || [],
       });
     } else {
       setEditingId(null);
-      setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '' });
+      setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '', permissions: [] });
     }
     setShowModal(true);
   };
@@ -75,7 +115,11 @@ function Users() {
     const { name, value, type, checked } = event.target;
     setFormData((previous) => ({
       ...previous,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: name === 'permissions'
+        ? checked
+          ? [...new Set([...(previous.permissions || []), value])]
+          : (previous.permissions || []).filter((permission) => permission !== value)
+        : type === 'checkbox' ? checked : value,
     }));
   };
 
@@ -109,7 +153,7 @@ function Users() {
         await updateUser(editingId, payload);
         await fetchUsers();
         setShowModal(false);
-        setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '' });
+        setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '', permissions: [] });
       } else {
         const response = await registerUser(payload);
         await fetchUsers();
@@ -118,7 +162,7 @@ function Users() {
           email: payload.email,
           password: response.data.generatedPassword
         });
-        setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '' });
+        setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '', permissions: [] });
       }
     } catch (err) {
       setError(err.response?.data?.message || `Failed to ${editingId ? 'update' : 'create'} user`);
@@ -309,6 +353,26 @@ function Users() {
                   </div>
                 </div>
               )}
+
+              <fieldset style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                <legend>Operational permissions</legend>
+                <p className="muted-copy">Permissions are granted individually. The Feeding &amp; Tuckshop Officer role does not automatically grant access to every operational area.</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.5rem' }}>
+                  {operationalPermissions.map(([permission, label]) => (
+                    <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                      <input
+                        type="checkbox"
+                        name="permissions"
+                        value={permission}
+                        checked={(formData.permissions || []).includes(permission)}
+                        onChange={handleInputChange}
+                        style={{ width: 'auto', margin: 0 }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               {editingId && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', marginBottom: '1rem' }}>

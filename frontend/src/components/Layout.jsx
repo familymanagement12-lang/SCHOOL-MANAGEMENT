@@ -17,6 +17,8 @@ function Layout() {
     '/results': 'Results', '/timetable': 'Term timetable', '/users': 'Accounts & roles',
     '/announcements': 'Announcements', '/fees': 'Fees', '/transactions': 'Finance', '/finance-audit': 'Finance audit trail',
     '/employees': 'Staff', '/payroll': 'Payroll', '/settings': 'Settings', '/feeding': 'School feeding', '/tuckshop': 'Tuckshop',
+    '/feeding/market-stock': 'Market stock register', '/feeding/marketing': 'Feeding and marketing',
+    '/feeding/imports': 'Workbook import centre',
   };
 
   useEffect(() => {
