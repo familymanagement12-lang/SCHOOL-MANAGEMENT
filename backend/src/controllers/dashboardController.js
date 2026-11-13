@@ -1,4 +1,8 @@
 const pool = require('../config/db');
+const {
+  MAIN_FINANCE_AUDIT_FILTER,
+  MAIN_FINANCE_TRANSACTION_FILTER,
+} = require('../services/financeScopes');
 
 const getSummary = async (req, res, next) => {
   const { school_id } = req.user; // From auth middleware
@@ -128,7 +132,7 @@ const getFinanceSummary = async (req, res, next) => {
         `SELECT
            COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0) AS income,
            COALESCE(SUM(amount) FILTER (WHERE type = 'expenditure'), 0) AS expenditure
-         FROM transactions WHERE school_id = $1`,
+         FROM transactions WHERE school_id = $1 AND ${MAIN_FINANCE_TRANSACTION_FILTER}`,
         [school_id]
       ),
       pool.query(
@@ -165,7 +169,7 @@ const getFinanceAudit = async (req, res, next) => {
               a.table_name, a.record_id, a.action, a.old_data, a.new_data, a.created_at
        FROM finance_audit_log a
        LEFT JOIN users u ON u.id = a.actor_id
-       WHERE a.school_id = $1
+       WHERE a.school_id = $1 AND ${MAIN_FINANCE_AUDIT_FILTER}
        ORDER BY a.created_at DESC, a.id DESC
        LIMIT $2`,
       [school_id, limit]

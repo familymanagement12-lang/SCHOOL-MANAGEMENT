@@ -54,6 +54,7 @@ export const downloadOperationsReport = async (report, startDate, endDate) => {
     feeding_expenses: Number(row.feeding_expenses || 0),
     kitchen_expenses: Number(row.kitchen_expenses || 0),
     tuckshop_purchases: Number(row.tuckshop_purchases || 0),
+    tuckshop_cogs: Number(row.tuckshop_cogs || 0),
     total_income: Number(row.total_income || 0),
     total_expenses: Number(row.total_expenses || 0),
     net: Number(row.total_income || 0) - Number(row.total_expenses || 0),
@@ -64,11 +65,24 @@ export const downloadOperationsReport = async (report, startDate, endDate) => {
     { header: 'Tuckshop sales', key: 'tuckshop_sales', width: 17, style: { numFmt: moneyFormat } },
     { header: 'Feeding expenses', key: 'feeding_expenses', width: 19, style: { numFmt: moneyFormat } },
     { header: 'Kitchen expenses', key: 'kitchen_expenses', width: 19, style: { numFmt: moneyFormat } },
-    { header: 'Tuckshop purchases', key: 'tuckshop_purchases', width: 20, style: { numFmt: moneyFormat } },
+    { header: 'Tuckshop stock purchases', key: 'tuckshop_purchases', width: 22, style: { numFmt: moneyFormat } },
+    { header: 'Cost of goods sold', key: 'tuckshop_cogs', width: 19, style: { numFmt: moneyFormat } },
     { header: 'Total income', key: 'total_income', width: 16, style: { numFmt: moneyFormat } },
     { header: 'Total expenses', key: 'total_expenses', width: 17, style: { numFmt: moneyFormat } },
     { header: 'Net', key: 'net', width: 15, style: { numFmt: moneyFormat } },
   ], weeklyRows);
+
+  addTableSheet(workbook, 'Operational I and E Detail', [
+    { header: 'Date', key: 'entry_date', width: 15 },
+    { header: 'Type', key: 'type', width: 18 },
+    { header: 'Category', key: 'category', width: 30 },
+    { header: 'Reference', key: 'reference', width: 24 },
+    { header: 'Description', key: 'description', width: 42 },
+    { header: 'Amount', key: 'amount', width: 16, style: { numFmt: moneyFormat } },
+  ], (report.operationalLedgerEntries || []).map((entry) => ({
+    ...entry,
+    amount: Number(entry.amount || 0),
+  })));
 
   addTableSheet(workbook, 'Purchase Details', [
     { header: 'Date', key: 'purchase_date', width: 15 },

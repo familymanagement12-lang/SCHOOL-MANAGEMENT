@@ -12,6 +12,17 @@ export const getFeedingReceipt = (id) => api.get(`/feeding/payments/${id}/receip
 export const getFeedingRegister = (date) => api.get('/feeding/register', { params: { date } });
 export const updateFeedingRegister = (id, is_served) => api.put(`/feeding/register/${id}`, { is_served });
 export const getFeedingReport = (startDate, endDate) => api.get('/feeding/reports', { params: { startDate, endDate } });
+export const getFeedingWorkbooks = () => api.get('/feeding/workbooks');
+export const downloadFeedingWorkbook = (id, fileName) => api.get(`/feeding/workbooks/${id}/download`, {
+  responseType: 'blob',
+}).then((response) => {
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 export const getShoppingAdvances = () => api.get('/feeding/advances');
 export const createShoppingAdvance = (data) => api.post('/feeding/advances', data);
 export const reconcileShoppingAdvance = (id, returned_amount) => api.put(`/feeding/advances/${id}/reconcile`, { returned_amount });

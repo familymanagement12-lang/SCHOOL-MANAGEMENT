@@ -1,10 +1,13 @@
 const pool = require('../config/db');
+const { MAIN_FINANCE_TRANSACTION_FILTER } = require('../services/financeScopes');
 
 const getTransactions = async (req, res, next) => {
   const { school_id } = req.user;
   try {
     const result = await pool.query(
-      'SELECT * FROM transactions WHERE school_id = $1 ORDER BY date DESC, created_at DESC',
+      `SELECT * FROM transactions
+       WHERE school_id = $1 AND ${MAIN_FINANCE_TRANSACTION_FILTER}
+       ORDER BY date DESC, created_at DESC`,
       [school_id]
     );
     res.json(result.rows);
@@ -23,7 +26,8 @@ const getFinanceReport = async (req, res, next) => {
     const result = await pool.query(
       `SELECT type, category, SUM(amount) as total
        FROM transactions
-       WHERE school_id = $1 AND date >= $2 AND date <= $3
+       WHERE school_id = $1 AND ${MAIN_FINANCE_TRANSACTION_FILTER}
+         AND date >= $2 AND date <= $3
        GROUP BY type, category
        ORDER BY type, total DESC`,
       [school_id, startDate, endDate]

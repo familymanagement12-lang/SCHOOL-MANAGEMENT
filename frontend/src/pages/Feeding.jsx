@@ -8,6 +8,7 @@ import {
 } from '../api/feeding';
 import { hasOperationalPermission } from '../utils/operationalPermissions';
 import { downloadDailyFeedingRegister, downloadOperationsReport } from '../utils/feedingReportWorkbook';
+import FeedingWorkbookArchive from '../components/FeedingWorkbookArchive';
 
 const today = () => new Date().toLocaleDateString('en-CA');
 const money = (value) => `GH₵${Number(value || 0).toFixed(2)}`;
@@ -600,16 +601,34 @@ function Feeding() {
               <>
                 <h3>Weekly income and expenses</h3>
                 <div className="table-wrap"><table>
-                  <thead><tr><th>Week beginning</th><th>Feeding income</th><th>Tuckshop sales</th><th>Feeding expenses</th><th>Kitchen expenses</th><th>Tuckshop purchases</th><th>Total income</th><th>Total expenses</th><th>Net</th></tr></thead>
+                  <thead><tr><th>Week beginning</th><th>Feeding income</th><th>Tuckshop sales</th><th>Feeding expenses</th><th>Kitchen expenses</th><th>Tuckshop stock purchases</th><th>Cost of goods sold</th><th>Total income</th><th>Total expenses</th><th>Net</th></tr></thead>
                   <tbody>{report.weeklyOperations.map((row) => <tr key={row.week_start}>
                     <td>{row.week_start}</td><td>{money(row.feeding_income)}</td><td>{money(row.tuckshop_sales)}</td>
                     <td>{money(row.feeding_expenses)}</td><td>{money(row.kitchen_expenses)}</td>
-                    <td>{money(row.tuckshop_purchases)}</td><td>{money(row.total_income)}</td><td>{money(row.total_expenses)}</td>
+                    <td>{money(row.tuckshop_purchases)}</td><td>{money(row.tuckshop_cogs)}</td>
+                    <td>{money(row.total_income)}</td><td>{money(row.total_expenses)}</td>
                     <td>{money(Number(row.total_income) - Number(row.total_expenses))}</td>
                   </tr>)}</tbody>
                 </table></div>
+                <p className="muted-copy">Tuckshop stock purchases are inventory; expenditure is recognized as cost of goods sold.</p>
               </>
             )}
+            {report?.operationalLedgerEntries && (
+              <>
+                <h3>Feeding &amp; Tuckshop operational income and expenditure</h3>
+                <div className="table-wrap"><table>
+                  <thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Reference</th><th>Description</th><th>Amount</th></tr></thead>
+                  <tbody>{report.operationalLedgerEntries.map((entry) => (
+                    <tr key={`${entry.source_type}-${entry.source_id}`}>
+                      <td>{entry.entry_date}</td><td>{entry.type}</td><td>{entry.category}</td>
+                      <td>{entry.reference || '—'}</td><td>{entry.description}</td><td>{money(entry.amount)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table></div>
+                {!report.operationalLedgerEntries.length && <p className="muted-copy">No operational income or expenditure was recorded in this date range.</p>}
+              </>
+            )}
+            <FeedingWorkbookArchive />
             {report?.feedingWeeklyCollections && (
               <>
                 <h3>Feeding income by school week and weekday</h3>

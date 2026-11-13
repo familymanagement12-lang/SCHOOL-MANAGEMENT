@@ -16,6 +16,8 @@ const {
   getFeedingReceipt,
   getFeedingRegister,
   getFeedingReport,
+  getImportedWorkbooks,
+  downloadImportedWorkbook,
   getShoppingAdvances,
   getCalendarEvents,
   getKitchenPurchases,
@@ -56,6 +58,8 @@ router.get('/payments/:id/receipt', authorizePermission('feeding.payments.read')
 router.get('/register', authorizeAnyPermission('feeding.register.read', 'feeding.register.manage'), getFeedingRegister);
 router.put('/register/:id', authorizePermission('feeding.register.manage'), updateFeedingRegister);
 router.get('/reports', authorizeAnyPermission('feeding.reports.read', 'tuckshop.reports.read'), getFeedingReport);
+router.get('/workbooks', authorizeAnyPermission('feeding.reports.read', 'tuckshop.reports.read'), getImportedWorkbooks);
+router.get('/workbooks/:id/download', authorizeAnyPermission('feeding.reports.read', 'tuckshop.reports.read'), downloadImportedWorkbook);
 router.get('/advances', authorizePermission('feeding.advances.manage'), getShoppingAdvances);
 router.post('/advances', authorizePermission('feeding.advances.manage'), createShoppingAdvance);
 router.put('/advances/:id/reconcile', authorizePermission('feeding.advances.manage'), reconcileShoppingAdvance);

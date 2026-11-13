@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { MAIN_FINANCE_TRANSACTION_FILTER } = require('./financeScopes');
 
 const ALLOWED_ROLES = new Set(['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper']);
 const INTENTS = [
@@ -166,10 +167,12 @@ async function collectVerifiedFacts(user, intent, question) {
       `SELECT type, category, COUNT(*)::INTEGER AS transactions,
               COALESCE(SUM(amount), 0)::NUMERIC(12,2)::FLOAT AS amount,
               MIN(date)::TEXT AS first_recorded, MAX(date)::TEXT AS last_recorded
-       FROM transactions WHERE school_id = $1 GROUP BY type, category ORDER BY type, category`, [schoolId]
+       FROM transactions
+       WHERE school_id = $1 AND ${MAIN_FINANCE_TRANSACTION_FILTER}
+       GROUP BY type, category ORDER BY type, category`, [schoolId]
     );
     data = result.rows;
-    source = 'Recorded income and expenditure transactions (all recorded dates)';
+    source = 'Recorded Fees/Main Income & Expenditure transactions (all recorded dates)';
   } else if (intent === 'library_search') {
     const phrase = question.match(/(?:about|on|for|related to|like)\s+(.+)$/i)?.[1]?.replace(/[?.!]+$/, '').trim();
     const term = phrase?.slice(0, 80) || '';

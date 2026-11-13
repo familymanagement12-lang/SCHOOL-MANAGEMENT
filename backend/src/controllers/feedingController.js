@@ -234,14 +234,6 @@ const recordFeedingPayment = async (req, res, next) => {
        WHERE school_id = $1 AND student_id = $2`,
       [req.user.school_id, studentId, amountFromCents(coverage.creditAddedCents)]
     );
-    await client.query(
-      `INSERT INTO transactions (school_id, type, category, amount, reference, description, date, source_type, source_id)
-       VALUES ($1, 'income', 'Feeding Fees', $2, $3, $4, $5, 'feeding_payment', $6)`,
-      [
-        req.user.school_id, amountFromCents(amountCents), receipt,
-        `Feeding payment received for ${student.name}`, paymentDate, paymentId,
-      ]
-    );
     const saved = await getPayment(client, req.user.school_id, paymentId);
     await client.query('COMMIT');
     res.status(201).json(saved);
@@ -363,7 +355,7 @@ const getFeedingReport = async (req, res, next) => {
     const [
       payments, sales, purchases, dailyCollections, classCollections, methodCollections,
       staffCollections, tuckshopSalesByDate, feedingWeeklyCollections, weeklyOperations,
-      purchaseDetails,
+      operationalLedgerEntries, purchaseDetails,
     ] = await Promise.all([
       granted.has('feeding.reports.read')
         ? pool.query(
@@ -507,6 +499,16 @@ const getFeedingReport = async (req, res, next) => {
              FROM tuckshop_product_purchases
              WHERE school_id = $1 AND $5::BOOLEAN AND status = 'approved'
                AND purchase_date BETWEEN $2 AND $3
+             UNION ALL
+             SELECT sale_date, 'tuckshop_cogs', cost_total
+             FROM (
+               SELECT s.school_id, s.id, s.sale_date, SUM(i.line_cost) AS cost_total
+               FROM tuckshop_sales s
+               JOIN tuckshop_sale_items i ON i.school_id = s.school_id AND i.sale_id = s.id
+               WHERE s.school_id = $1 AND $5::BOOLEAN AND s.sale_date BETWEEN $2 AND $3
+               GROUP BY s.school_id, s.id, s.sale_date
+               HAVING COUNT(*) = COUNT(i.line_cost) AND SUM(i.line_cost) > 0
+             ) costed_sales
            )
            SELECT date_trunc('week', operation_date)::DATE::TEXT AS week_start,
                   COALESCE(SUM(amount) FILTER (WHERE kind = 'feeding_income'), 0) AS feeding_income,
@@ -514,11 +516,58 @@ const getFeedingReport = async (req, res, next) => {
                   COALESCE(SUM(amount) FILTER (WHERE kind = 'feeding_expenses'), 0) AS feeding_expenses,
                   COALESCE(SUM(amount) FILTER (WHERE kind = 'kitchen_expenses'), 0) AS kitchen_expenses,
                   COALESCE(SUM(amount) FILTER (WHERE kind = 'tuckshop_purchases'), 0) AS tuckshop_purchases,
+                  COALESCE(SUM(amount) FILTER (WHERE kind = 'tuckshop_cogs'), 0) AS tuckshop_cogs,
                   COALESCE(SUM(amount) FILTER (WHERE kind IN ('feeding_income', 'tuckshop_sales')), 0) AS total_income,
-                  COALESCE(SUM(amount) FILTER (WHERE kind IN ('feeding_expenses', 'kitchen_expenses', 'tuckshop_purchases')), 0) AS total_expenses
+                  COALESCE(SUM(amount) FILTER (WHERE kind IN ('feeding_expenses', 'kitchen_expenses', 'tuckshop_cogs')), 0) AS total_expenses
            FROM operations
            GROUP BY date_trunc('week', operation_date)
            ORDER BY week_start`,
+          [
+            req.user.school_id, startDate, endDate,
+            granted.has('feeding.reports.read'), granted.has('tuckshop.reports.read'),
+          ]
+        )
+        : Promise.resolve(null),
+      granted.has('feeding.reports.read') || granted.has('tuckshop.reports.read')
+        ? pool.query(
+          `WITH operational_entries AS (
+             SELECT payment_date AS entry_date, 'income'::TEXT AS type, 'Feeding income'::TEXT AS category,
+                    amount_received AS amount, receipt_number AS reference,
+                    'Feeding payment'::TEXT AS description, 'feeding_payment'::TEXT AS source_type,
+                    id::TEXT AS source_id
+             FROM feeding_payments
+             WHERE school_id = $1 AND $4::BOOLEAN AND payment_date BETWEEN $2 AND $3
+             UNION ALL
+             SELECT sale_date, 'income', 'Tuckshop sales', total_amount, receipt_number,
+                    'Tuckshop sale', 'tuckshop_sale', id::TEXT
+             FROM tuckshop_sales
+             WHERE school_id = $1 AND $5::BOOLEAN AND sale_date BETWEEN $2 AND $3
+             UNION ALL
+             SELECT purchase_date, 'expenditure', expense_category, total_amount,
+                    COALESCE(reference, 'PUR-' || id::TEXT),
+                    CASE WHEN purpose = 'feeding' THEN 'Feeding purchase' ELSE 'Kitchen purchase' END,
+                    'kitchen_purchase', id::TEXT
+             FROM kitchen_purchases
+             WHERE school_id = $1 AND status = 'approved' AND purchase_date BETWEEN $2 AND $3
+               AND (($4::BOOLEAN AND purpose = 'feeding') OR ($5::BOOLEAN AND purpose = 'kitchen'))
+             UNION ALL
+             SELECT sale_date, 'expenditure', 'Tuckshop cost of goods sold',
+                    cost_total, 'COGS-' || id::TEXT, 'Cost of goods sold for tuckshop sale',
+                    'tuckshop_sale_cogs', id::TEXT
+             FROM (
+               SELECT s.school_id, s.id, s.sale_date, s.receipt_number,
+                      SUM(i.line_cost) AS cost_total
+               FROM tuckshop_sales s
+               JOIN tuckshop_sale_items i ON i.school_id = s.school_id AND i.sale_id = s.id
+               WHERE s.school_id = $1 AND $5::BOOLEAN AND s.sale_date BETWEEN $2 AND $3
+               GROUP BY s.school_id, s.id, s.sale_date, s.receipt_number
+               HAVING COUNT(*) = COUNT(i.line_cost) AND SUM(i.line_cost) > 0
+             ) costed_sales
+           )
+           SELECT entry_date::TEXT AS entry_date, type, category, amount, reference,
+                  description, source_type, source_id
+           FROM operational_entries
+           ORDER BY entry_date DESC, source_id DESC`,
           [
             req.user.school_id, startDate, endDate,
             granted.has('feeding.reports.read'), granted.has('tuckshop.reports.read'),
@@ -588,8 +637,47 @@ const getFeedingReport = async (req, res, next) => {
       tuckshopCollections: tuckshopSalesByDate ? tuckshopSalesByDate.rows : null,
       feedingWeeklyCollections: feedingWeeklyCollections?.rows || null,
       weeklyOperations: weeklyOperations?.rows || null,
+      operationalLedgerEntries: operationalLedgerEntries?.rows || null,
       purchaseDetails: purchaseDetails?.rows || null,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getImportedWorkbooks = async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, file_name, sheet_summary, imported_at, octet_length(file_data)::INTEGER AS file_size
+       FROM feeding_tuckshop_imported_workbooks
+       WHERE school_id = $1
+       ORDER BY imported_at DESC, id DESC`,
+      [req.user.school_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const downloadImportedWorkbook = async (req, res, next) => {
+  if (!/^\d+$/.test(req.params.id)) return res.status(404).json({ message: 'Workbook not found.' });
+  try {
+    const result = await pool.query(
+      `SELECT file_name, file_data
+       FROM feeding_tuckshop_imported_workbooks
+       WHERE school_id = $1 AND id = $2`,
+      [req.user.school_id, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ message: 'Workbook not found.' });
+    const workbook = result.rows[0];
+    const fileName = workbook.file_name.replace(/["\\\r\n]/g, '_');
+    res.set({
+      'Cache-Control': 'no-store',
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+    });
+    res.send(workbook.file_data);
   } catch (error) {
     next(error);
   }
@@ -703,7 +791,6 @@ const createTuckshopSale = async (req, res, next) => {
     if (productsResult.rows.length !== ids.length) throw fail(400, 'One or more sale products are unavailable.');
     const products = new Map(productsResult.rows.map((product) => [Number(product.id), product]));
     let totalCents = 0;
-    let totalCostCents = 0;
     const saleLines = [];
     for (const [productId, quantity] of normalizedItems) {
       const product = products.get(productId);
@@ -713,7 +800,6 @@ const createTuckshopSale = async (req, res, next) => {
       const costCents = moneyToCents(product.cost_price || 0);
       const lineCostCents = costCents * quantity;
       totalCents += lineCents;
-      totalCostCents += lineCostCents;
       saleLines.push({ product, quantity, unitCents, lineCents, costCents, lineCostCents });
     }
     if (totalCents <= 0) throw fail(400, 'The sale total must be greater than zero.');
@@ -753,24 +839,6 @@ const createTuckshopSale = async (req, res, next) => {
           amountFromCents(line.costCents), amountFromCents(line.lineCostCents),
         ]
       );
-    }
-    await client.query(
-      `INSERT INTO transactions (school_id, type, category, amount, reference, description, date, source_type, source_id)
-       SELECT school_id, 'income', 'Tuckshop Sales', total_amount, receipt_number,
-              'Tuckshop sale', sale_date, 'tuckshop_sale', id
-       FROM tuckshop_sales WHERE school_id = $1 AND id = $2`,
-      [req.user.school_id, saleId]
-    );
-    if (totalCostCents > 0) {
-      const costTransaction = await client.query(
-        `INSERT INTO transactions (school_id, type, category, amount, reference, description, date, source_type, source_id)
-         SELECT school_id, 'expenditure', 'Tuckshop Cost of Goods Sold', $2, $3,
-                'Cost of goods sold for tuckshop sale', sale_date, 'tuckshop_sale_cogs', id
-         FROM tuckshop_sales WHERE school_id = $1 AND id = $4
-         ON CONFLICT (school_id, source_type, source_id) DO NOTHING`,
-        [req.user.school_id, amountFromCents(totalCostCents), receiptNumber('COGS'), saleId]
-      );
-      if (costTransaction.rowCount !== 1) throw fail(409, 'A cost-of-goods transaction already exists for this sale.');
     }
     const saved = await getTuckshopSale(client, req.user.school_id, saleId);
     await client.query('COMMIT');
@@ -1512,17 +1580,6 @@ const approveKitchenPurchase = async (req, res, next) => {
         [req.user.school_id, item.stock_item_id, item.quantity, req.user.id]
       );
     }
-    const finance = await client.query(
-      `INSERT INTO transactions (school_id, type, category, amount, reference, description, date, source_type, source_id)
-       VALUES ($1, 'expenditure', $2, $3, $4, $5, $6, 'kitchen_purchase', $7)
-       ON CONFLICT (school_id, source_type, source_id) DO NOTHING`,
-      [
-        req.user.school_id, row.expense_category, row.total_amount,
-        row.reference || `PUR-${row.id}`, `${row.purpose === 'feeding' ? 'Feeding' : 'Kitchen'} purchase`,
-        row.purchase_date, row.id,
-      ]
-    );
-    if (finance.rowCount !== 1) throw fail(409, 'A finance transaction already exists for this purchase.');
     const updated = await client.query(
       `UPDATE kitchen_purchases SET status = 'approved', approved_by = $3, approved_at = NOW()
        WHERE school_id = $1 AND id = $2 RETURNING *`,
@@ -1552,6 +1609,8 @@ module.exports = {
   getFeedingReceipt,
   getFeedingRegister,
   getFeedingReport,
+  getImportedWorkbooks,
+  downloadImportedWorkbook,
   getShoppingAdvances,
   getCalendarEvents,
   getKitchenPurchases,
