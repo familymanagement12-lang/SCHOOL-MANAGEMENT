@@ -362,7 +362,8 @@ const getFeedingReport = async (req, res, next) => {
       )).rows.map((row) => row.permission));
     const [
       payments, sales, purchases, dailyCollections, classCollections, methodCollections,
-      staffCollections, tuckshopSalesByDate,
+      staffCollections, tuckshopSalesByDate, feedingWeeklyCollections, weeklyOperations,
+      purchaseDetails,
     ] = await Promise.all([
       granted.has('feeding.reports.read')
         ? pool.query(
@@ -465,6 +466,108 @@ const getFeedingReport = async (req, res, next) => {
           [req.user.school_id, startDate, endDate]
         )
         : Promise.resolve(null),
+      granted.has('feeding.reports.read')
+        ? pool.query(
+          `SELECT date_trunc('week', payment_date)::DATE::TEXT AS week_start,
+                  COALESCE(SUM(amount_received) FILTER (WHERE EXTRACT(ISODOW FROM payment_date) = 1), 0) AS monday,
+                  COALESCE(SUM(amount_received) FILTER (WHERE EXTRACT(ISODOW FROM payment_date) = 2), 0) AS tuesday,
+                  COALESCE(SUM(amount_received) FILTER (WHERE EXTRACT(ISODOW FROM payment_date) = 3), 0) AS wednesday,
+                  COALESCE(SUM(amount_received) FILTER (WHERE EXTRACT(ISODOW FROM payment_date) = 4), 0) AS thursday,
+                  COALESCE(SUM(amount_received) FILTER (WHERE EXTRACT(ISODOW FROM payment_date) = 5), 0) AS friday,
+                  COALESCE(SUM(amount_received) FILTER (WHERE EXTRACT(ISODOW FROM payment_date) = 6), 0) AS saturday,
+                  COALESCE(SUM(amount_received) FILTER (WHERE EXTRACT(ISODOW FROM payment_date) = 7), 0) AS sunday,
+                  COALESCE(SUM(amount_received), 0) AS total,
+                  COALESCE(SUM(days_covered), 0)::INTEGER AS feeding_days
+           FROM feeding_payments
+           WHERE school_id = $1 AND payment_date BETWEEN $2 AND $3
+           GROUP BY date_trunc('week', payment_date)
+           ORDER BY week_start`,
+          [req.user.school_id, startDate, endDate]
+        )
+        : Promise.resolve(null),
+      granted.has('feeding.reports.read') || granted.has('tuckshop.reports.read')
+        ? pool.query(
+          `WITH operations AS (
+             SELECT payment_date AS operation_date, 'feeding_income'::TEXT AS kind, amount_received AS amount
+             FROM feeding_payments
+             WHERE school_id = $1 AND $4::BOOLEAN AND payment_date BETWEEN $2 AND $3
+             UNION ALL
+             SELECT sale_date, 'tuckshop_sales', total_amount
+             FROM tuckshop_sales
+             WHERE school_id = $1 AND $5::BOOLEAN AND sale_date BETWEEN $2 AND $3
+             UNION ALL
+             SELECT purchase_date,
+                    CASE WHEN purpose = 'feeding' THEN 'feeding_expenses' ELSE 'kitchen_expenses' END,
+                    total_amount
+             FROM kitchen_purchases
+             WHERE school_id = $1 AND status = 'approved' AND purchase_date BETWEEN $2 AND $3
+               AND (($4::BOOLEAN AND purpose = 'feeding') OR ($5::BOOLEAN AND purpose = 'kitchen'))
+             UNION ALL
+             SELECT purchase_date, 'tuckshop_purchases', total_amount
+             FROM tuckshop_product_purchases
+             WHERE school_id = $1 AND $5::BOOLEAN AND status = 'approved'
+               AND purchase_date BETWEEN $2 AND $3
+           )
+           SELECT date_trunc('week', operation_date)::DATE::TEXT AS week_start,
+                  COALESCE(SUM(amount) FILTER (WHERE kind = 'feeding_income'), 0) AS feeding_income,
+                  COALESCE(SUM(amount) FILTER (WHERE kind = 'tuckshop_sales'), 0) AS tuckshop_sales,
+                  COALESCE(SUM(amount) FILTER (WHERE kind = 'feeding_expenses'), 0) AS feeding_expenses,
+                  COALESCE(SUM(amount) FILTER (WHERE kind = 'kitchen_expenses'), 0) AS kitchen_expenses,
+                  COALESCE(SUM(amount) FILTER (WHERE kind = 'tuckshop_purchases'), 0) AS tuckshop_purchases,
+                  COALESCE(SUM(amount) FILTER (WHERE kind IN ('feeding_income', 'tuckshop_sales')), 0) AS total_income,
+                  COALESCE(SUM(amount) FILTER (WHERE kind IN ('feeding_expenses', 'kitchen_expenses', 'tuckshop_purchases')), 0) AS total_expenses
+           FROM operations
+           GROUP BY date_trunc('week', operation_date)
+           ORDER BY week_start`,
+          [
+            req.user.school_id, startDate, endDate,
+            granted.has('feeding.reports.read'), granted.has('tuckshop.reports.read'),
+          ]
+        )
+        : Promise.resolve(null),
+      granted.has('feeding.reports.read') || granted.has('tuckshop.reports.read')
+        ? pool.query(
+          `WITH purchase_rows AS (
+             SELECT p.id, p.purchase_date::TEXT AS purchase_date,
+                    CASE WHEN p.purpose = 'feeding' THEN 'Feeding' ELSE 'Kitchen' END AS source,
+                    p.expense_category AS category, p.supplier,
+                    COALESCE(p.reference, p.supporting_reference, '') AS reference,
+                    COALESCE(string_agg(
+                      COALESCE(i.item_name, stock.name, 'Item') || ' × ' || i.quantity || ' ' || i.unit
+                      || CASE WHEN i.tax_inclusive_unit_cost IS NOT NULL
+                           THEN ' @ GH₵' || i.tax_inclusive_unit_cost::TEXT ELSE '' END,
+                      ', ' ORDER BY i.id
+                    ) FILTER (WHERE i.id IS NOT NULL), '') AS items,
+                    p.total_amount, p.status
+             FROM kitchen_purchases p
+             LEFT JOIN kitchen_purchase_items i ON i.school_id = p.school_id AND i.purchase_id = p.id
+             LEFT JOIN kitchen_stock_items stock ON stock.school_id = i.school_id AND stock.id = i.stock_item_id
+             WHERE p.school_id = $1 AND p.purchase_date BETWEEN $2 AND $3
+               AND (($4::BOOLEAN AND p.purpose = 'feeding') OR ($5::BOOLEAN AND p.purpose = 'kitchen'))
+             GROUP BY p.id
+             UNION ALL
+             SELECT p.id, p.purchase_date::TEXT, 'Tuckshop Stock', 'Tuckshop Stock', p.supplier,
+                    COALESCE(p.reference, p.supporting_reference, ''),
+                    COALESCE(string_agg(
+                      product.name || ' × ' || i.quantity || ' @ GH₵' || i.unit_cost::TEXT,
+                      ', ' ORDER BY i.id
+                    ) FILTER (WHERE i.id IS NOT NULL), ''),
+                    p.total_amount, p.status
+             FROM tuckshop_product_purchases p
+             LEFT JOIN tuckshop_product_purchase_items i ON i.school_id = p.school_id AND i.purchase_id = p.id
+             LEFT JOIN tuckshop_products product ON product.school_id = i.school_id AND product.id = i.product_id
+             WHERE p.school_id = $1 AND $5::BOOLEAN AND p.purchase_date BETWEEN $2 AND $3
+             GROUP BY p.id
+           )
+           SELECT id, purchase_date, source, category, supplier, reference, items, total_amount, status
+           FROM purchase_rows
+           ORDER BY purchase_date DESC, id DESC`,
+          [
+            req.user.school_id, startDate, endDate,
+            granted.has('feeding.reports.read'), granted.has('tuckshop.reports.read'),
+          ]
+        )
+        : Promise.resolve(null),
     ]);
     res.json({
       feeding: payments ? { count: payments.rows[0].count, total: payments.rows[0].total } : null,
@@ -483,6 +586,9 @@ const getFeedingReport = async (req, res, next) => {
         byStaff: staffCollections.rows,
       } : null,
       tuckshopCollections: tuckshopSalesByDate ? tuckshopSalesByDate.rows : null,
+      feedingWeeklyCollections: feedingWeeklyCollections?.rows || null,
+      weeklyOperations: weeklyOperations?.rows || null,
+      purchaseDetails: purchaseDetails?.rows || null,
     });
   } catch (error) {
     next(error);

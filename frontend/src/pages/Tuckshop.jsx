@@ -7,6 +7,7 @@ import {
   saveKitchenStock, saveTuckshopDailyReconciliation, saveTuckshopProduct,
 } from '../api/feeding';
 import { hasOperationalPermission } from '../utils/operationalPermissions';
+import { downloadOperationsReport } from '../utils/feedingReportWorkbook';
 
 const today = () => new Date().toLocaleDateString('en-CA');
 const money = (value) => `GH₵${Number(value || 0).toFixed(2)}`;
@@ -339,6 +340,14 @@ function Tuckshop() {
     }
   };
 
+  const downloadReport = async () => {
+    try {
+      await downloadOperationsReport(report, reportDates.startDate, reportDates.endDate);
+    } catch (err) {
+      setError(err.message || 'Unable to export the tuckshop report.');
+    }
+  };
+
   if (loading) return <div className="page"><p>Loading tuckshop information...</p></div>;
 
   return (
@@ -550,6 +559,30 @@ function Tuckshop() {
               {report.tuckshop && <div className="mini-stat"><span>Cost of goods sold ({report.tuckshop.costedSalesCount} costed sales)</span><strong>{money(report.tuckshop.costOfGoodsSold)}</strong></div>}
               {report.tuckshop && <div className="mini-stat"><span>Gross profit on costed sales</span><strong>{money(report.tuckshop.grossProfit)}</strong></div>}
               {report.approvedPurchases?.map((purchase) => <div className="mini-stat" key={purchase.purpose}><span>{purchase.purpose} purchases ({purchase.count})</span><strong>{money(purchase.total)}</strong></div>)}
+            </div>}
+            {report && <button type="button" className="btn-secondary" onClick={downloadReport}>Download Excel report</button>}
+            {report?.weeklyOperations && <>
+              <h3>Weekly income and expenses</h3>
+              <div className="table-wrap"><table>
+                <thead><tr><th>Week beginning</th><th>Feeding income</th><th>Tuckshop sales</th><th>Feeding expenses</th><th>Kitchen expenses</th><th>Tuckshop purchases</th><th>Total income</th><th>Total expenses</th><th>Net</th></tr></thead>
+                <tbody>{report.weeklyOperations.map((row) => <tr key={row.week_start}>
+                  <td>{row.week_start}</td><td>{money(row.feeding_income)}</td><td>{money(row.tuckshop_sales)}</td>
+                  <td>{money(row.feeding_expenses)}</td><td>{money(row.kitchen_expenses)}</td>
+                  <td>{money(row.tuckshop_purchases)}</td><td>{money(row.total_income)}</td><td>{money(row.total_expenses)}</td>
+                  <td>{money(Number(row.total_income) - Number(row.total_expenses))}</td>
+                </tr>)}</tbody>
+              </table></div>
+            </>}
+            {report?.purchaseDetails && <div className="table-wrap">
+              <h3>Purchase detail</h3>
+              <table>
+                <thead><tr><th>Date</th><th>Source</th><th>Category</th><th>Supplier</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+                <tbody>{report.purchaseDetails.map((purchase) => <tr key={`${purchase.source}-${purchase.id}`}>
+                  <td>{purchase.purchase_date}</td><td>{purchase.source}</td><td>{purchase.category}</td>
+                  <td>{purchase.supplier || '—'}</td><td>{purchase.items || '—'}</td>
+                  <td>{money(purchase.total_amount)}</td><td>{purchase.status}</td>
+                </tr>)}</tbody>
+              </table>
             </div>}
             {report?.tuckshopCollections && <div className="table-wrap"><table>
               <thead><tr><th>Date</th><th>Transactions</th><th>Cash</th><th>Mobile money</th><th>Other</th><th>Total</th></tr></thead>

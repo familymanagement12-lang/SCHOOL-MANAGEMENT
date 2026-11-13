@@ -7,9 +7,13 @@ import {
   searchFeedingStudents, setFeedingRate, updateFeedingRegister,
 } from '../api/feeding';
 import { hasOperationalPermission } from '../utils/operationalPermissions';
+import { downloadDailyFeedingRegister, downloadOperationsReport } from '../utils/feedingReportWorkbook';
 
 const today = () => new Date().toLocaleDateString('en-CA');
 const money = (value) => `GH₵${Number(value || 0).toFixed(2)}`;
+const newFeedingPurchaseItem = () => ({
+  stock_item_id: '', quantity: '1', unit_cost: '',
+});
 const newIdempotencyKey = () => globalThis.crypto?.randomUUID?.()
   || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -42,7 +46,10 @@ function Feeding() {
   });
   const [advanceKey, setAdvanceKey] = useState(newIdempotencyKey());
   const [advanceReturns, setAdvanceReturns] = useState({});
-  const [purchaseForm, setPurchaseForm] = useState({ purchase_date: today(), supplier: '', reference: '', stock_item_id: '', quantity: '1', unit_cost: '', advance_id: '' });
+  const [purchaseForm, setPurchaseForm] = useState({
+    purchase_date: today(), supplier: '', reference: '', advance_id: '',
+    items: [newFeedingPurchaseItem()],
+  });
   const [purchaseKey, setPurchaseKey] = useState(newIdempotencyKey());
   const [report, setReport] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -219,6 +226,22 @@ function Feeding() {
     }
   };
 
+  const downloadReport = async () => {
+    try {
+      await downloadOperationsReport(report, reportDates.startDate, reportDates.endDate);
+    } catch (err) {
+      setError(err.message || 'Unable to export the feeding report.');
+    }
+  };
+
+  const downloadRegister = async () => {
+    try {
+      await downloadDailyFeedingRegister(register, registerDate);
+    } catch (err) {
+      setError(err.message || 'Unable to export the daily feeding register.');
+    }
+  };
+
   const recordFeedingPurchase = async (event) => {
     event.preventDefault();
     setBusy(true);
@@ -231,9 +254,12 @@ function Feeding() {
         reference: purchaseForm.reference,
         advance_id: purchaseForm.advance_id || null,
         idempotency_key: purchaseKey,
-        items: [{ stock_item_id: purchaseForm.stock_item_id, quantity: purchaseForm.quantity, unit_cost: purchaseForm.unit_cost }],
+        items: purchaseForm.items,
       });
-      setPurchaseForm((current) => ({ ...current, supplier: '', reference: '', unit_cost: '', advance_id: '' }));
+      setPurchaseForm((current) => ({
+        ...current, supplier: '', reference: '', advance_id: '',
+        items: [newFeedingPurchaseItem()],
+      }));
       setPurchaseKey(newIdempotencyKey());
       const response = await getKitchenPurchases();
       setFeedingPurchases(response.data);
@@ -243,6 +269,28 @@ function Feeding() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const updateFeedingPurchaseItem = (index, field, value) => {
+    setPurchaseForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, [field]: value } : item
+      )),
+    }));
+  };
+
+  const addFeedingPurchaseItem = () => {
+    setPurchaseForm((current) => ({ ...current, items: [...current.items, newFeedingPurchaseItem()] }));
+  };
+
+  const removeFeedingPurchaseItem = (index) => {
+    setPurchaseForm((current) => ({
+      ...current,
+      items: current.items.length > 1
+        ? current.items.filter((_, itemIndex) => itemIndex !== index)
+        : current.items,
+    }));
   };
 
   const approveFeedingPurchase = async (purchase) => {
@@ -430,6 +478,7 @@ function Feeding() {
             <div className="panel-heading"><div><p className="eyebrow">Daily service</p><h2>Feeding register</h2></div></div>
             <label htmlFor="feeding-register-date">School date</label>
             <input id="feeding-register-date" type="date" value={registerDate} onChange={async (event) => { setRegisterDate(event.target.value); await refreshRegister(event.target.value); }} />
+            <button type="button" className="btn-secondary" onClick={downloadRegister}>Download daily register</button>
             <div className="table-wrap"><table>
               <thead><tr><th>Student</th><th>Class</th><th>Receipt</th><th>Status</th>{can('feeding.register.manage') && <th>Action</th>}</tr></thead>
               <tbody>{register.map((entry) => (
@@ -449,12 +498,21 @@ function Feeding() {
             {canFeedingPurchaseCreate && (
               <form className="feeding-calendar-form" onSubmit={recordFeedingPurchase}>
                 <label>Date<input type="date" required value={purchaseForm.purchase_date} onChange={(event) => setPurchaseForm({ ...purchaseForm, purchase_date: event.target.value })} /></label>
-                <label>Stock item<select required value={purchaseForm.stock_item_id} onChange={(event) => setPurchaseForm({ ...purchaseForm, stock_item_id: event.target.value })}><option value="">Select item</option>{kitchenStock.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select></label>
-                <label>Quantity<input type="number" min="0.001" step="0.001" required value={purchaseForm.quantity} onChange={(event) => setPurchaseForm({ ...purchaseForm, quantity: event.target.value })} /></label>
-                <label>Unit cost (GH₵)<input type="number" min="0" step="0.01" required value={purchaseForm.unit_cost} onChange={(event) => setPurchaseForm({ ...purchaseForm, unit_cost: event.target.value })} /></label>
                 <label>Supplier<input value={purchaseForm.supplier} onChange={(event) => setPurchaseForm({ ...purchaseForm, supplier: event.target.value })} /></label>
                 <label>Invoice/reference<input value={purchaseForm.reference} onChange={(event) => setPurchaseForm({ ...purchaseForm, reference: event.target.value })} /></label>
                 {canAdvanceManage && <label>Shopping advance (optional)<select value={purchaseForm.advance_id} onChange={(event) => setPurchaseForm({ ...purchaseForm, advance_id: event.target.value })}><option value="">No advance</option>{advances.map((advance) => <option key={advance.id} value={advance.id}>#{advance.id} {advance.recipient_name} — {money(advance.unaccounted_amount)} available</option>)}</select></label>}
+                <fieldset style={{ gridColumn: '1 / -1', display: 'grid', gap: '0.75rem', border: '1px solid #dbe3eb', borderRadius: '8px', padding: '1rem' }}>
+                  <legend>Purchase items</legend>
+                  {purchaseForm.items.map((item, index) => (
+                    <div key={index} className="feeding-calendar-form">
+                      <label>Stock item<select required value={item.stock_item_id} onChange={(event) => updateFeedingPurchaseItem(index, 'stock_item_id', event.target.value)}><option value="">Select item</option>{kitchenStock.map((stockItem) => <option key={stockItem.id} value={stockItem.id}>{stockItem.name} ({stockItem.unit})</option>)}</select></label>
+                      <label>Quantity<input type="number" min="0.001" step="0.001" required value={item.quantity} onChange={(event) => updateFeedingPurchaseItem(index, 'quantity', event.target.value)} /></label>
+                      <label>Unit cost (GH₵)<input type="number" min="0" step="0.01" required value={item.unit_cost} onChange={(event) => updateFeedingPurchaseItem(index, 'unit_cost', event.target.value)} /></label>
+                      <button type="button" className="btn-secondary" disabled={purchaseForm.items.length === 1} onClick={() => removeFeedingPurchaseItem(index)}>Remove item</button>
+                    </div>
+                  ))}
+                  <button type="button" className="btn-secondary" onClick={addFeedingPurchaseItem}>Add another item</button>
+                </fieldset>
                 <button className="btn-primary" disabled={busy || !kitchenStock.length}>Record for approval</button>
               </form>
             )}
@@ -537,6 +595,47 @@ function Feeding() {
               {report.tuckshop && <div className="mini-stat"><span>Gross profit on costed sales</span><strong>{money(report.tuckshop.grossProfit)}</strong></div>}
               {report.approvedPurchases?.map((purchase) => <div className="mini-stat" key={purchase.purpose}><span>{purchase.purpose} purchases ({purchase.count})</span><strong>{money(purchase.total)}</strong></div>)}
             </div>}
+            {report && <button type="button" className="btn-secondary" onClick={downloadReport}>Download Excel report</button>}
+            {report?.weeklyOperations && (
+              <>
+                <h3>Weekly income and expenses</h3>
+                <div className="table-wrap"><table>
+                  <thead><tr><th>Week beginning</th><th>Feeding income</th><th>Tuckshop sales</th><th>Feeding expenses</th><th>Kitchen expenses</th><th>Tuckshop purchases</th><th>Total income</th><th>Total expenses</th><th>Net</th></tr></thead>
+                  <tbody>{report.weeklyOperations.map((row) => <tr key={row.week_start}>
+                    <td>{row.week_start}</td><td>{money(row.feeding_income)}</td><td>{money(row.tuckshop_sales)}</td>
+                    <td>{money(row.feeding_expenses)}</td><td>{money(row.kitchen_expenses)}</td>
+                    <td>{money(row.tuckshop_purchases)}</td><td>{money(row.total_income)}</td><td>{money(row.total_expenses)}</td>
+                    <td>{money(Number(row.total_income) - Number(row.total_expenses))}</td>
+                  </tr>)}</tbody>
+                </table></div>
+              </>
+            )}
+            {report?.feedingWeeklyCollections && (
+              <>
+                <h3>Feeding income by school week and weekday</h3>
+                <div className="table-wrap"><table>
+                  <thead><tr><th>Week beginning</th><th>Monday</th><th>Tuesday</th><th>Wednesday</th><th>Thursday</th><th>Friday</th><th>Saturday</th><th>Sunday</th><th>Total</th></tr></thead>
+                  <tbody>{report.feedingWeeklyCollections.map((row) => <tr key={row.week_start}>
+                    <td>{row.week_start}</td><td>{money(row.monday)}</td><td>{money(row.tuesday)}</td>
+                    <td>{money(row.wednesday)}</td><td>{money(row.thursday)}</td><td>{money(row.friday)}</td>
+                    <td>{money(row.saturday)}</td><td>{money(row.sunday)}</td><td>{money(row.total)}</td>
+                  </tr>)}</tbody>
+                </table></div>
+              </>
+            )}
+            {report?.purchaseDetails && (
+              <>
+                <h3>Purchase detail</h3>
+                <div className="table-wrap"><table>
+                  <thead><tr><th>Date</th><th>Source</th><th>Category</th><th>Supplier</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+                  <tbody>{report.purchaseDetails.map((purchase) => <tr key={`${purchase.source}-${purchase.id}`}>
+                    <td>{purchase.purchase_date}</td><td>{purchase.source}</td><td>{purchase.category}</td>
+                    <td>{purchase.supplier || '—'}</td><td>{purchase.items || '—'}</td>
+                    <td>{money(purchase.total_amount)}</td><td>{purchase.status}</td>
+                  </tr>)}</tbody>
+                </table></div>
+              </>
+            )}
             {report?.feedingCollections && (
               <>
                 <h3>Daily collections</h3>
