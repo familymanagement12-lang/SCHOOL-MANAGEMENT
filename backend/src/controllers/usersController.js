@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Resend } = require('resend');
+const { OPERATIONAL_PERMISSIONS, DEFAULT_FEEDING_TUCKSHOP_PERMISSIONS } = require('../services/operationalPermissions');
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const getUsers = async (req, res, next) => {
@@ -9,7 +10,13 @@ const getUsers = async (req, res, next) => {
 
   try {
     const result = await pool.query(
-      'SELECT id, name, email, role, is_active, created_at FROM users WHERE school_id = $1 ORDER BY created_at DESC',
+      `SELECT u.id, u.name, u.email, u.role, u.is_active, u.created_at, u.subjects,
+              COALESCE(ARRAY(
+                SELECT p.permission FROM user_permissions p
+                WHERE p.school_id = u.school_id AND p.user_id = u.id
+                ORDER BY p.permission
+              ), ARRAY[]::TEXT[]) AS permissions
+       FROM users u WHERE u.school_id = $1 ORDER BY u.created_at DESC`,
       [school_id]
     );
     res.json(result.rows);
@@ -25,9 +32,11 @@ const createUser = async (req, res, next) => {
   if (!name || !email || !role) {
     return res.status(400).json({ message: 'Name, email, and role are required.' });
   }
-  if (!['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant'].includes(role)) {
+  if (!['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) {
     return res.status(400).json({ message: 'Invalid user role.' });
   }
+  const permissions = normalizePermissions(role, req.body.permissions);
+  if (!permissions) return res.status(400).json({ message: 'One or more operational permissions are invalid.' });
 
   try {
     // 1. Auto-generate an 8-character secure password
@@ -37,10 +46,22 @@ const createUser = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(generatedPassword, 10);
     const verificationToken = crypto.randomBytes(32).toString('hex');
     
-    const result = await pool.query(
-      'INSERT INTO users (school_id, name, email, password, role, subjects, is_active, verification_token) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role, subjects, is_active, created_at',
-      [school_id, name, email, hashedPassword, role, subjects || [], is_active !== false, verificationToken]
-    );
+    const client = await pool.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
+      result = await client.query(
+        'INSERT INTO users (school_id, name, email, password, role, subjects, is_active, verification_token) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role, subjects, is_active, created_at',
+        [school_id, name, email, hashedPassword, role, subjects || [], is_active !== false, verificationToken]
+      );
+      await replaceUserPermissions(client, school_id, result.rows[0].id, permissions, req.user.id);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
 
     // Automatically add teachers and admins to the HR/Payroll Employees table
     if (role === 'teacher' || role === 'admin') {
@@ -136,20 +157,36 @@ const updateUser = async (req, res, next) => {
   const { school_id } = req.user;
   const { id } = req.params;
   const { name, email, role, is_active, subjects } = req.body;
-  if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
+  if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
+  const permissions = req.body.permissions === undefined ? null : normalizePermissions(role, req.body.permissions);
+  if (permissions === null && req.body.permissions !== undefined) return res.status(400).json({ message: 'One or more operational permissions are invalid.' });
 
   try {
-    const result = await pool.query(
-      `UPDATE users 
-       SET name = COALESCE($1, name), 
-           email = COALESCE($2, email), 
-           role = COALESCE($3, role), 
-           is_active = COALESCE($4, is_active), 
-           subjects = COALESCE($5, subjects)
-       WHERE id = $6 AND school_id = $7
-       RETURNING id, name, email, role, is_active, subjects, created_at`,
-      [name, email, role, is_active, subjects, id, school_id]
-    );
+    const client = await pool.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
+      result = await client.query(
+        `UPDATE users
+         SET name = COALESCE($1, name),
+             email = COALESCE($2, email),
+             role = COALESCE($3, role),
+             is_active = COALESCE($4, is_active),
+             subjects = COALESCE($5, subjects)
+         WHERE id = $6 AND school_id = $7
+         RETURNING id, name, email, role, is_active, subjects, created_at`,
+        [name, email, role, is_active, subjects, id, school_id]
+      );
+      if (result.rows.length && permissions !== null) {
+        await replaceUserPermissions(client, school_id, id, permissions, req.user.id);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User not found.' });
@@ -204,3 +241,23 @@ const deleteUser = async (req, res, next) => {
 };
 
 module.exports = { getUsers, createUser, changePassword, resetUserPassword, updateUser, verifyEmail, deleteUser };
+
+function normalizePermissions(role, requestedPermissions) {
+  const permissions = requestedPermissions === undefined
+    ? (role === 'feeding_tuckshop_officer' ? DEFAULT_FEEDING_TUCKSHOP_PERMISSIONS : [])
+    : requestedPermissions;
+  if (!Array.isArray(permissions) || permissions.some((permission) => !OPERATIONAL_PERMISSIONS.includes(permission))) {
+    return null;
+  }
+  return [...new Set(permissions)];
+}
+
+async function replaceUserPermissions(client, schoolId, userId, permissions, actorId) {
+  await client.query('DELETE FROM user_permissions WHERE school_id = $1 AND user_id = $2', [schoolId, userId]);
+  if (!permissions.length) return;
+  await client.query(
+    `INSERT INTO user_permissions (school_id, user_id, permission, updated_by)
+     SELECT $1, $2, permission, $4 FROM UNNEST($3::TEXT[]) AS permission`,
+    [schoolId, userId, permissions, actorId]
+  );
+}

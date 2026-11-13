@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const crypto = require('crypto');
 const { Resend } = require('resend');
+const requestContext = require('../config/requestContext');
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const createToken = (user) => {
@@ -62,8 +63,15 @@ const login = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
+    const permissionsResult = await requestContext.run(
+      { id: user.id, school_id: user.school_id, role: user.role },
+      () => pool.query(
+        'SELECT permission FROM user_permissions WHERE school_id = $1 AND user_id = $2 ORDER BY permission',
+        [user.school_id, user.id]
+      )
+    );
     const token = createToken(user);
-    res.json({ token, user: { id: user.id, email: user.email, role: user.role, school_id: user.school_id, name: user.name, must_change_password: user.must_change_password } });
+    res.json({ token, user: { id: user.id, email: user.email, role: user.role, school_id: user.school_id, name: user.name, must_change_password: user.must_change_password, permissions: permissionsResult.rows.map((row) => row.permission) } });
   } catch (error) {
     next(error);
   }

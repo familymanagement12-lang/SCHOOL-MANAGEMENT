@@ -19,6 +19,7 @@ const payrollRoutes = require('./payroll');
 const libraryRoutes = require('./library');
 const aiRoutes = require('./ai');
 const studentPortalRoutes = require('./studentPortal');
+const feedingRoutes = require('./feeding');
 
 const router = express.Router();
 
@@ -42,5 +43,6 @@ router.use('/payroll', payrollRoutes);
 router.use('/library', libraryRoutes);
 router.use('/ai', aiRoutes);
 router.use('/student-portal', studentPortalRoutes);
+router.use('/feeding', feedingRoutes);
 
 module.exports = router;

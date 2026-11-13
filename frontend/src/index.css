@@ -1250,3 +1250,38 @@ tbody tr:hover { background-color: #f8fafc; }
   .timetable-history-panel, .timetable-copy-panel, .timetable-action-buttons, .lesson-card-actions { display: none !important; }
   .timetable-week-grid { grid-template-columns: repeat(3, 1fr) !important; overflow: visible !important; }
 }
+
+.feeding-student-results { display: grid; max-height: 260px; overflow: auto; margin-top: 8px; border: 1px solid var(--workspace-border); border-radius: 6px; }
+.feeding-student-option { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; text-align: left; color: var(--workspace-ink); background: var(--workspace-panel); border: 0; border-bottom: 1px solid var(--workspace-border); cursor: pointer; }
+.feeding-student-option:hover { background: #eff8fd; color: #075e9a; }
+.feeding-selected-student, .feeding-coverage-preview { display: grid; gap: 7px; margin-top: 14px; padding: 14px; background: #eff8fd; border: 1px solid #cce8f5; border-radius: 8px; }
+.feeding-selected-student button { justify-self: start; margin-top: 4px; }
+.feeding-coverage-preview small { color: #526579; }
+.feeding-calendar-form, .feeding-report-form, .tuckshop-inline-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; margin: 14px 0; }
+.feeding-calendar-form label, .feeding-report-form label, .tuckshop-inline-form label { display: grid; gap: 6px; }
+.feeding-receipt { max-width: 520px; }
+.feeding-receipt p { padding-bottom: 7px; border-bottom: 1px dashed var(--workspace-border); }
+.tuckshop-product-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 10px; }
+.tuckshop-product-card { display: grid; gap: 7px; min-height: 100px; padding: 12px; color: var(--workspace-ink); text-align: left; background: var(--workspace-panel); border: 1px solid var(--workspace-border); border-radius: 7px; cursor: pointer; }
+.tuckshop-product-card:hover:not(:disabled) { border-color: #078fc4; box-shadow: 0 3px 12px rgba(7, 94, 154, .12); }
+.tuckshop-product-card span { color: #075e9a; font-weight: 700; }
+.tuckshop-product-card small { color: var(--workspace-muted); }
+.tuckshop-product-card:disabled { opacity: .55; cursor: not-allowed; }
+.tuckshop-cart-row { display: grid; grid-template-columns: minmax(0, 1fr) 74px auto 28px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--workspace-border); }
+.tuckshop-cart-row input { min-width: 0; }
+.tuckshop-cart-row button { color: #b42318; background: transparent; border: 0; cursor: pointer; font-size: 20px; }
+.tuckshop-total { display: flex; justify-content: space-between; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--workspace-border); }
+.tuckshop-total strong { color: #075e9a; font-size: 1.2rem; }
+.tuckshop-checkbox { display: flex !important; grid-template-columns: auto 1fr; align-items: center; }
+.tuckshop-checkbox input { width: auto; }
+.workspace-shell.theme-dark .feeding-selected-student,
+.workspace-shell.theme-dark .feeding-coverage-preview { background: #102b3b; border-color: #1d5878; }
+.workspace-shell.theme-dark .feeding-coverage-preview small { color: #b8cfdd; }
+.workspace-shell.theme-dark .feeding-student-option:hover { background: #102b3b; }
+@media print {
+  body:has(.feeding-receipt) * { visibility: hidden !important; }
+  body:has(.feeding-receipt) .feeding-receipt,
+  body:has(.feeding-receipt) .feeding-receipt * { visibility: visible !important; }
+  body:has(.feeding-receipt) .feeding-receipt { position: fixed !important; inset: 0 !important; margin: 0 !important; box-shadow: none !important; }
+  body:has(.feeding-receipt) .feeding-receipt .modal-actions { display: none !important; }
+}

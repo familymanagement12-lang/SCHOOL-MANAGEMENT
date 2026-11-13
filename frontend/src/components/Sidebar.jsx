@@ -3,9 +3,10 @@ import { NavLink } from 'react-router-dom';
 import {
   Activity, Archive, BookOpen, CalendarDays, CircleDollarSign, ClipboardCheck,
   FileBarChart2, GraduationCap, LayoutDashboard, Megaphone, Settings, Users, Sparkles,
-  WalletCards, X, Boxes
+  WalletCards, X, Boxes, UtensilsCrossed, ShoppingBag
 } from 'lucide-react';
 import { getSettings } from '../api/settings';
+import { hasOperationalPermission } from '../utils/operationalPermissions';
 
 const sections = [
   {
@@ -34,6 +35,8 @@ const sections = [
       { path: '/payroll', label: 'Payroll', icon: Activity, roles: ['admin', 'accountant'] },
       { path: '/users', label: 'Teachers & roles', icon: Users, roles: ['admin', 'teacher'] },
       { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
+      { path: '/feeding', label: 'Feeding', icon: UtensilsCrossed, permissions: ['feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.reports.read'] },
+      { path: '/tuckshop', label: 'Tuckshop', icon: ShoppingBag, permissions: ['tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.create', 'tuckshop.sales.read', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.reports.read'] },
     ],
   },
 ];
@@ -46,6 +49,7 @@ const roleLabels = {
   storekeeper: 'Storekeeper',
   teacher: 'Teacher',
   accountant: 'Accountant',
+  feeding_tuckshop_officer: 'Feeding & Tuckshop Officer',
 };
 
 function Sidebar({ mobileOpen = false, onNavigate = () => {} }) {
@@ -80,7 +84,10 @@ function Sidebar({ mobileOpen = false, onNavigate = () => {} }) {
 
         <nav className="sidebar-nav" aria-label="Main navigation">
           {sections.map((section) => {
-            const visibleLinks = section.links.filter((link) => !link.roles || link.roles.includes(user?.role));
+            const visibleLinks = section.links.filter((link) => (
+              (!link.roles || link.roles.includes(user?.role))
+              && (!link.permissions || link.permissions.some((permission) => hasOperationalPermission(user, permission)))
+            ));
             if (!visibleLinks.length) return null;
             return (
               <div className="sidebar-section" key={section.label}>

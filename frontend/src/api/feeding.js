@@ -1,0 +1,23 @@
+import api from './api';
+
+export const getFeedingClasses = () => api.get('/feeding/classes');
+export const setFeedingRate = (classId, daily_rate) => api.put(`/feeding/classes/${classId}/rate`, { daily_rate });
+export const searchFeedingStudents = (search, classId) => api.get('/feeding/students', { params: { search, classId } });
+export const getCalendarEvents = () => api.get('/feeding/calendar');
+export const createCalendarEvent = (data) => api.post('/feeding/calendar', data);
+export const deleteCalendarEvent = (id) => api.delete(`/feeding/calendar/${id}`);
+export const getFeedingPayments = (studentId) => api.get('/feeding/payments', { params: studentId ? { studentId } : {} });
+export const recordFeedingPayment = (data) => api.post('/feeding/payments', data);
+export const getFeedingReceipt = (id) => api.get(`/feeding/payments/${id}/receipt`);
+export const getFeedingRegister = (date) => api.get('/feeding/register', { params: { date } });
+export const updateFeedingRegister = (id, is_served) => api.put(`/feeding/register/${id}`, { is_served });
+export const getFeedingReport = (startDate, endDate) => api.get('/feeding/reports', { params: { startDate, endDate } });
+export const getTuckshopProducts = () => api.get('/feeding/tuckshop/products');
+export const saveTuckshopProduct = (data, id) => id ? api.put(`/feeding/tuckshop/products/${id}`, data) : api.post('/feeding/tuckshop/products', data);
+export const getTuckshopSales = () => api.get('/feeding/tuckshop/sales');
+export const createTuckshopSale = (data) => api.post('/feeding/tuckshop/sales', data);
+export const getKitchenStock = () => api.get('/feeding/kitchen/stock');
+export const saveKitchenStock = (data, id) => id ? api.put(`/feeding/kitchen/stock/${id}`, data) : api.post('/feeding/kitchen/stock', data);
+export const getKitchenPurchases = () => api.get('/feeding/kitchen/purchases');
+export const createKitchenPurchase = (data) => api.post(`/feeding/${data.purpose === 'feeding' ? 'feeding' : 'kitchen'}/purchases`, data);
+export const approveKitchenPurchase = (id, purpose = 'kitchen') => api.post(`/feeding/${purpose === 'feeding' ? 'feeding' : 'kitchen'}/purchases/${id}/approve`);

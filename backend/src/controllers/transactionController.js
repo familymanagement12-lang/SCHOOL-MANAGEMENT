@@ -75,8 +75,20 @@ const deleteTransaction = async (req, res, next) => {
   const { school_id } = req.user;
   const { id } = req.params;
   try {
-    const result = await pool.query('DELETE FROM transactions WHERE id = $1 AND school_id = $2 RETURNING *', [id, school_id]);
-    if (!result.rows.length) return res.status(404).json({ message: 'Transaction not found.' });
+    const result = await pool.query(
+      'DELETE FROM transactions WHERE id = $1 AND school_id = $2 AND source_type IS NULL RETURNING *',
+      [id, school_id]
+    );
+    if (!result.rows.length) {
+      const linked = await pool.query(
+        'SELECT source_type FROM transactions WHERE id = $1 AND school_id = $2',
+        [id, school_id]
+      );
+      if (linked.rows[0]?.source_type) {
+        return res.status(409).json({ message: 'Operational finance entries cannot be deleted here. Correct the original feeding, tuckshop, or purchase record instead.' });
+      }
+      return res.status(404).json({ message: 'Transaction not found.' });
+    }
     res.json({ message: 'Transaction deleted successfully.' });
   } catch (error) {
     next(error);
