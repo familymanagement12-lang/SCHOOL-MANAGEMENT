@@ -660,6 +660,47 @@ const getImportedWorkbooks = async (req, res, next) => {
   }
 };
 
+const getImportedFinanceFigures = async (req, res, next) => {
+  try {
+    const granted = ['admin', 'feeding_tuckshop_officer'].includes(req.user.role)
+      ? new Set(['feeding.reports.read', 'tuckshop.reports.read'])
+      : new Set((await pool.query(
+        `SELECT permission FROM user_permissions
+         WHERE school_id = $1 AND user_id = $2
+           AND permission IN ('feeding.reports.read', 'tuckshop.reports.read')`,
+        [req.user.school_id, req.user.id]
+      )).rows.map((row) => row.permission));
+    const modules = [];
+    if (granted.has('feeding.reports.read')) modules.push('feeding', 'marketing');
+    if (granted.has('tuckshop.reports.read')) modules.push('tuckshop');
+    if (!modules.length) return res.json({ entries: [], totals: [] });
+
+    const [entries, totals] = await Promise.all([
+      pool.query(
+        `SELECT id, module, entry_type, amount, period_label, description, source_file,
+                sheet_name, source_row, source_column, counts_in_totals, support_reason
+         FROM feeding_tuckshop_workbook_figures
+         WHERE school_id = $1 AND module = ANY($2::TEXT[])
+         ORDER BY counts_in_totals DESC, id`,
+        [req.user.school_id, modules]
+      ),
+      pool.query(
+        `SELECT module, entry_type, COUNT(*)::INTEGER AS count,
+                COALESCE(SUM(amount), 0) AS total
+         FROM feeding_tuckshop_workbook_figures
+         WHERE school_id = $1 AND module = ANY($2::TEXT[])
+           AND counts_in_totals AND entry_type IN ('income', 'expense')
+         GROUP BY module, entry_type
+         ORDER BY module, entry_type`,
+        [req.user.school_id, modules]
+      ),
+    ]);
+    res.json({ entries: entries.rows, totals: totals.rows });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const downloadImportedWorkbook = async (req, res, next) => {
   if (!/^\d+$/.test(req.params.id)) return res.status(404).json({ message: 'Workbook not found.' });
   try {
@@ -1609,6 +1650,7 @@ module.exports = {
   getFeedingReceipt,
   getFeedingRegister,
   getFeedingReport,
+  getImportedFinanceFigures,
   getImportedWorkbooks,
   downloadImportedWorkbook,
   getShoppingAdvances,

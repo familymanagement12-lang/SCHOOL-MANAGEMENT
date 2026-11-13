@@ -30,7 +30,7 @@ function FeedingWorkbookArchive() {
   return (
     <div className="feeding-workbook-archive">
       <h3>Historical workbook archive</h3>
-      <p className="muted-copy">Original workbooks are preserved here and are not posted to the Fees/Main Income &amp; Expenditure ledger.</p>
+      <p className="muted-copy">Workbook figures are imported into the operational accounts above. Original files are also preserved here for audit and download.</p>
       {error && <p className="error-message" role="alert">{error}</p>}
       {workbooks.length > 0 && (
         <div className="table-wrap">

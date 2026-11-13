@@ -8,6 +8,7 @@ import {
 } from '../api/feeding';
 import { hasOperationalPermission } from '../utils/operationalPermissions';
 import { downloadOperationsReport } from '../utils/feedingReportWorkbook';
+import FeedingHistoricalFinance from '../components/FeedingHistoricalFinance';
 import FeedingWorkbookArchive from '../components/FeedingWorkbookArchive';
 
 const today = () => new Date().toLocaleDateString('en-CA');
@@ -589,6 +590,7 @@ function Tuckshop() {
               </table></div>
               {!report.operationalLedgerEntries.length && <p className="muted-copy">No operational income or expenditure was recorded in this date range.</p>}
             </>}
+            <FeedingHistoricalFinance modules={['tuckshop']} />
             <FeedingWorkbookArchive />
             {report?.purchaseDetails && <div className="table-wrap">
               <h3>Purchase detail</h3>

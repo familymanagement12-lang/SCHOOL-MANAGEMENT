@@ -13,6 +13,7 @@ export const getFeedingRegister = (date) => api.get('/feeding/register', { param
 export const updateFeedingRegister = (id, is_served) => api.put(`/feeding/register/${id}`, { is_served });
 export const getFeedingReport = (startDate, endDate) => api.get('/feeding/reports', { params: { startDate, endDate } });
 export const getFeedingWorkbooks = () => api.get('/feeding/workbooks');
+export const getImportedFinanceFigures = () => api.get('/feeding/imported-finance');
 export const downloadFeedingWorkbook = (id, fileName) => api.get(`/feeding/workbooks/${id}/download`, {
   responseType: 'blob',
 }).then((response) => {

@@ -8,6 +8,7 @@ import {
 } from '../api/feeding';
 import { hasOperationalPermission } from '../utils/operationalPermissions';
 import { downloadDailyFeedingRegister, downloadOperationsReport } from '../utils/feedingReportWorkbook';
+import FeedingHistoricalFinance from '../components/FeedingHistoricalFinance';
 import FeedingWorkbookArchive from '../components/FeedingWorkbookArchive';
 
 const today = () => new Date().toLocaleDateString('en-CA');
@@ -628,6 +629,7 @@ function Feeding() {
                 {!report.operationalLedgerEntries.length && <p className="muted-copy">No operational income or expenditure was recorded in this date range.</p>}
               </>
             )}
+            <FeedingHistoricalFinance modules={['feeding', 'marketing']} />
             <FeedingWorkbookArchive />
             {report?.feedingWeeklyCollections && (
               <>
