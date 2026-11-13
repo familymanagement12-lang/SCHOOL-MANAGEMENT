@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const pool = require('../config/db');
-const { adjustAssetQuantity, issueInventory } = require('./storeInventoryController');
+const { adjustAssetQuantity, getInventoryStaff, issueInventory } = require('./storeInventoryController');
 
 function createResponse() {
   return {
@@ -30,6 +30,25 @@ function installDatabase(handler) {
   pool.connect = async () => client;
   return { statements, restore: () => { pool.connect = originalConnect; } };
 }
+
+test('inventory staff directory contains employee-register records only', async () => {
+  const originalQuery = pool.query;
+  let executedSql = '';
+  pool.query = async (sql, params) => {
+    executedSql = sql;
+    assert.deepEqual(params, [3]);
+    return { rows: [{ id: 12, name: 'Employee Record', role: 'Teacher', staff_type: 'employee' }] };
+  };
+  try {
+    const res = createResponse();
+    await getInventoryStaff({ user: { school_id: 3 } }, res, assert.fail);
+    assert.deepEqual(res.body, [{ id: 12, name: 'Employee Record', role: 'Teacher', staff_type: 'employee' }]);
+    assert.match(executedSql, /FROM employees/);
+    assert.doesNotMatch(executedSql, /FROM users/);
+  } finally {
+    pool.query = originalQuery;
+  }
+});
 
 test('issuance saves a manually entered recipient name without looking up an account', async () => {
   const statements = [];

@@ -439,10 +439,7 @@ const getRequestCatalogue = async (req, res, next) => {
 const getInventoryStaff = async (req, res, next) => {
   try {
     const result = await pool.query(
-      `SELECT id, name, role, 'user'::text AS staff_type FROM users
-       WHERE school_id=$1 AND is_active=TRUE AND role <> 'student'
-       UNION ALL
-       SELECT id, full_name AS name, role, 'employee'::text AS staff_type FROM employees
+      `SELECT id, full_name AS name, role, 'employee'::text AS staff_type FROM employees
        WHERE school_id=$1 AND is_active=TRUE
        ORDER BY name`,
       [req.user.school_id]
