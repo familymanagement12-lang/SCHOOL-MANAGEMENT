@@ -9,46 +9,6 @@ const getInitials = (name) => {
 };
 const getRoleLabel = (role) => ({ admin: 'Administrator', librarian: 'Librarian', inventory: 'Inventory', store: 'Inventory', storekeeper: 'Storekeeper', teacher: 'Teacher', accountant: 'Accountant', feeding_tuckshop_officer: 'Feeding & Tuckshop Officer' }[role] || role);
 
-const operationalPermissionGroups = [
-  {
-    label: 'Feeding',
-    permissions: [
-      ['feeding.access', 'Feeding dashboard'],
-      ['feeding.students.read', 'Search students'],
-      ['feeding.rates.read', 'View class rates'],
-      ['feeding.rates.manage', 'Manage class rates'],
-      ['feeding.payments.read', 'View payment history and receipts'],
-      ['feeding.payments.create', 'Record feeding payments'],
-      ['feeding.register.read', 'View daily feeding register'],
-      ['feeding.register.manage', 'Mark feeding register'],
-      ['feeding.calendar.manage', 'Manage holidays and vacation dates'],
-      ['feeding.purchases.create', 'Record feeding purchases'],
-      ['feeding.purchases.read', 'View feeding purchases'],
-      ['feeding.purchases.approve', 'Approve feeding purchases'],
-      ['feeding.advances.manage', 'Issue and reconcile shopping advances'],
-      ['feeding.reports.read', 'View feeding reports'],
-    ],
-  },
-  {
-    label: 'Tuckshop and kitchen',
-    permissions: [
-      ['tuckshop.access', 'Tuckshop dashboard'],
-      ['tuckshop.products.read', 'View tuckshop products'],
-      ['tuckshop.products.manage', 'Manage tuckshop products'],
-      ['tuckshop.sales.read', 'View sales history'],
-      ['tuckshop.sales.create', 'Process POS sales'],
-      ['tuckshop.stock.read', 'View kitchen stock'],
-      ['tuckshop.stock.manage', 'Manage kitchen stock'],
-      ['tuckshop.purchases.create', 'Record kitchen and tuckshop purchases'],
-      ['tuckshop.purchases.read', 'View kitchen and tuckshop purchases'],
-      ['tuckshop.purchases.approve', 'Approve kitchen and tuckshop purchases'],
-      ['tuckshop.sales.reconcile', 'Reconcile daily cash sales'],
-      ['tuckshop.reports.read', 'View tuckshop reports'],
-    ],
-  },
-];
-const defaultOperationalPermissions = operationalPermissionGroups.flatMap((group) => group.permissions.map(([permission]) => permission));
-
 function Users() {
   const user = JSON.parse(localStorage.getItem('user') || 'null');
   const isAdmin = user?.role === 'admin';
@@ -66,7 +26,6 @@ function Users() {
     role: 'teacher',
     is_active: true,
     subjects: '',
-    permissions: [],
   });
 
   useEffect(() => {
@@ -104,11 +63,10 @@ function Users() {
         role: user.role,
         is_active: user.is_active !== false,
         subjects: user.subjects ? user.subjects.join(', ') : '',
-        permissions: user.permissions || [],
       });
     } else {
       setEditingId(null);
-      setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '', permissions: [] });
+      setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '' });
     }
     setShowModal(true);
   };
@@ -118,18 +76,6 @@ function Users() {
     setFormData((previous) => ({
       ...previous,
       [name]: type === 'checkbox' ? checked : value,
-      ...(name === 'role' && value === 'feeding_tuckshop_officer' && !previous.permissions.length
-        ? { permissions: defaultOperationalPermissions }
-        : {}),
-    }));
-  };
-
-  const toggleOperationalPermission = (permission) => {
-    setFormData((previous) => ({
-      ...previous,
-      permissions: previous.permissions.includes(permission)
-        ? previous.permissions.filter((value) => value !== permission)
-        : [...previous.permissions, permission],
     }));
   };
 
@@ -163,7 +109,7 @@ function Users() {
         await updateUser(editingId, payload);
         await fetchUsers();
         setShowModal(false);
-        setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '', permissions: [] });
+        setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '' });
       } else {
         const response = await registerUser(payload);
         await fetchUsers();
@@ -172,7 +118,7 @@ function Users() {
           email: payload.email,
           password: response.data.generatedPassword
         });
-        setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '', permissions: [] });
+        setFormData({ name: '', email: '', role: 'teacher', is_active: true, subjects: '' });
       }
     } catch (err) {
       setError(err.response?.data?.message || `Failed to ${editingId ? 'update' : 'create'} user`);
@@ -229,7 +175,7 @@ function Users() {
           <div>
             <p className="eyebrow" style={{ color: '#dbeafe', fontWeight: '600' }}>System Management</p>
             <h1 style={{ color: '#ffffff', fontSize: '2.5rem', marginTop: '0.25rem', marginBottom: '0.5rem' }}>Users & Roles</h1>
-            <p style={{ color: '#f5f3ff', fontSize: '1.1rem', opacity: 0.9 }}>Manage school accounts, roles, and individual feeding and tuckshop permissions.</p>
+            <p style={{ color: '#f5f3ff', fontSize: '1.1rem', opacity: 0.9 }}>Manage school accounts and staff roles.</p>
           </div>
           {isAdmin && (
             <button className="btn-primary" onClick={() => handleOpenModal()} style={{ backgroundColor: '#ffffff', color: '#6d28d9', border: 'none', fontWeight: 'bold' }}>
@@ -348,31 +294,6 @@ function Users() {
                 <option value="storekeeper">Storekeeper</option>
                 <option value="feeding_tuckshop_officer">Feeding &amp; Tuckshop Officer</option>
               </select>
-
-              <fieldset style={{ margin: '1rem 0', padding: '1rem', border: '1px solid #dbe3eb', borderRadius: '8px' }}>
-                <legend style={{ padding: '0 0.4rem', fontWeight: 700 }}>Operational permissions</legend>
-                <p style={{ marginTop: 0, color: '#64748b', fontSize: '0.85rem' }}>
-                  Choose only the specific operations this account should access. Administrators retain their existing system role.
-                </p>
-                {operationalPermissionGroups.map((group) => (
-                  <div key={group.label} style={{ marginBottom: '0.75rem' }}>
-                    <strong>{group.label}</strong>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.5rem', marginTop: '0.45rem' }}>
-                      {group.permissions.map(([permission, label]) => (
-                        <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', margin: 0, fontWeight: 400 }}>
-                          <input
-                            type="checkbox"
-                            checked={formData.permissions.includes(permission)}
-                            onChange={() => toggleOperationalPermission(permission)}
-                            style={{ width: 'auto', margin: 0 }}
-                          />
-                          {label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </fieldset>
 
               {formData.role === 'teacher' && (
                 <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>

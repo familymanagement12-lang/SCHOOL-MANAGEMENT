@@ -352,7 +352,7 @@ const getFeedingReport = async (req, res, next) => {
     return res.status(400).json({ message: 'Provide a valid report date range.' });
   }
   try {
-    const granted = req.user.role === 'admin'
+    const granted = ['admin', 'feeding_tuckshop_officer'].includes(req.user.role)
       ? new Set(['feeding.reports.read', 'tuckshop.reports.read'])
       : new Set((await pool.query(
         `SELECT permission FROM user_permissions
@@ -1162,7 +1162,7 @@ const saveKitchenStock = async (req, res, next) => {
 
 const getKitchenPurchases = async (req, res, next) => {
   try {
-    const permittedPurposes = req.user.role === 'admin'
+    const permittedPurposes = ['admin', 'feeding_tuckshop_officer'].includes(req.user.role)
       ? ['feeding', 'kitchen']
       : (await pool.query(
         `SELECT permission FROM user_permissions

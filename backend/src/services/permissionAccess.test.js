@@ -2,12 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { hasAllPermissions, hasAnyPermission } = require('./permissionAccess');
 
-test('feeding and tuckshop permissions are independent and can coexist on one account', () => {
-  const permissions = new Set(['feeding.payments.create', 'tuckshop.sales.create']);
+test('feeding and tuckshop officers can use both modules without individual grants', () => {
+  const permissions = new Set();
   assert.equal(hasAllPermissions('feeding_tuckshop_officer', permissions, ['feeding.payments.create']), true);
   assert.equal(hasAllPermissions('feeding_tuckshop_officer', permissions, ['tuckshop.sales.create']), true);
   assert.equal(hasAllPermissions('feeding_tuckshop_officer', permissions, ['feeding.payments.create', 'tuckshop.sales.create']), true);
-  assert.equal(hasAllPermissions('feeding_tuckshop_officer', permissions, ['tuckshop.products.manage']), false);
+  assert.equal(hasAnyPermission('feeding_tuckshop_officer', permissions, ['feeding.access', 'tuckshop.access']), true);
+  assert.equal(hasAllPermissions('feeding_tuckshop_officer', permissions, ['finance.transactions.read']), false);
 });
 
 test('users without a grant cannot enter the protected feature', () => {

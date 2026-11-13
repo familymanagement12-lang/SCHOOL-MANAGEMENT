@@ -97,11 +97,7 @@ const RoleBasedDashboard = () => {
   if (role === 'teacher') return <TeacherDashboard />;
   if (role === 'inventory' || role === 'store' || role === 'storekeeper') return <Inventory />;
   if (role === 'librarian') return <Library />;
-  if (role === 'feeding_tuckshop_officer') {
-    if (hasOperationalPermission(user, 'feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read')) return <Navigate to="/feeding" replace />;
-    if (hasOperationalPermission(user, 'tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read')) return <Navigate to="/tuckshop" replace />;
-    return <div className="page"><p>No feeding or tuckshop permissions are assigned to your account. Contact an administrator.</p></div>;
-  }
+  if (role === 'feeding_tuckshop_officer') return <Navigate to="/feeding" replace />;
   return <Dashboard />;
 };
 

@@ -158,7 +158,9 @@ const updateUser = async (req, res, next) => {
   const { id } = req.params;
   const { name, email, role, is_active, subjects } = req.body;
   if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
-  const permissions = req.body.permissions === undefined ? null : normalizePermissions(role, req.body.permissions);
+  const permissions = role === 'feeding_tuckshop_officer'
+    ? normalizePermissions(role)
+    : req.body.permissions === undefined ? null : normalizePermissions(role, req.body.permissions);
   if (permissions === null && req.body.permissions !== undefined) return res.status(400).json({ message: 'One or more operational permissions are invalid.' });
 
   try {
@@ -243,9 +245,9 @@ const deleteUser = async (req, res, next) => {
 module.exports = { getUsers, createUser, changePassword, resetUserPassword, updateUser, verifyEmail, deleteUser };
 
 function normalizePermissions(role, requestedPermissions) {
-  const permissions = requestedPermissions === undefined
-    ? (role === 'feeding_tuckshop_officer' ? DEFAULT_FEEDING_TUCKSHOP_PERMISSIONS : [])
-    : requestedPermissions;
+  const permissions = role === 'feeding_tuckshop_officer'
+    ? DEFAULT_FEEDING_TUCKSHOP_PERMISSIONS
+    : (requestedPermissions === undefined ? [] : requestedPermissions);
   if (!Array.isArray(permissions) || permissions.some((permission) => !OPERATIONAL_PERMISSIONS.includes(permission))) {
     return null;
   }
