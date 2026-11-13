@@ -12,7 +12,6 @@ const requestRoles = ['admin', 'inventory', 'storekeeper', 'teacher'];
 
 router.get('/dashboard', authorize(storeRoles), store.getInventoryDashboard);
 router.get('/search', authorize(storeRoles), store.searchInventory);
-router.get('/recipients', authorize(storeRoles), store.getRecipients);
 router.get('/request-catalogue', authorize(requestRoles), store.getRequestCatalogue);
 router.get('/staff', authorize(storeRoles), store.getInventoryStaff);
 router.get('/reports', authorize(storeRoles), store.getInventoryReport);

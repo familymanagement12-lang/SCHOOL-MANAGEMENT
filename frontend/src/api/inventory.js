@@ -6,7 +6,6 @@ export const updateInventoryItem = (id, data) => api.put(`/inventory/${id}`, dat
 export const deleteInventoryItem = (id) => api.delete(`/inventory/${id}`);
 export const getInventoryDashboard = () => api.get('/inventory/dashboard');
 export const searchInventory = (query) => api.get('/inventory/search', { params: { q: query } });
-export const getInventoryRecipients = (query) => api.get('/inventory/recipients', { params: { q: query } });
 export const getInventoryRequestCatalogue = () => api.get('/inventory/request-catalogue');
 export const getInventoryStaff = () => api.get('/inventory/staff');
 export const getInventorySuppliers = () => api.get('/inventory/suppliers');

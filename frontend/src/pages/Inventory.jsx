@@ -10,7 +10,7 @@ import {
   createInventoryMaintenance, completeInventoryMaintenance, getInventoryRequests,
   createInventoryRequest, decideInventoryRequest, fulfillInventoryRequest,
   getInventoryStocktakes, createInventoryStocktake, reconcileInventoryStocktake,
-  getInventoryMovements,   getInventoryRecipients, getInventoryRequestCatalogue, getInventoryReport,
+  getInventoryMovements, getInventoryRequestCatalogue, getInventoryReport,
   getInventoryStaff,
 } from '../api/inventory';
 import { getUsers } from '../api/users';
@@ -95,10 +95,8 @@ function Inventory() {
   });
   const [receivingPurchaseId, setReceivingPurchaseId] = useState('');
   const [deliveryForm, setDeliveryForm] = useState({ delivery_reference: '', notes: '', quantities: {} });
-  const [recipientSearch, setRecipientSearch] = useState('');
-  const [recipients, setRecipients] = useState([]);
   const [issueForm, setIssueForm] = useState({
-    inventory_id: '', recipient_type: 'student', recipient_id: '', recipient_name: '',
+    inventory_id: '', recipient_type: 'student', recipient_name: '',
     department: '', quantity: '1', purpose: '',
   });
   const [lastReceipt, setLastReceipt] = useState(null);
@@ -154,20 +152,6 @@ function Inventory() {
   };
 
   useEffect(() => { refresh(); }, []);
-
-  useEffect(() => {
-    if (recipientSearch.trim().length < 2 || !canManage || issueForm.recipient_id) {
-      setRecipients([]);
-      return undefined;
-    }
-    let active = true;
-    const timer = setTimeout(() => {
-      getInventoryRecipients(recipientSearch.trim())
-        .then((response) => { if (active) setRecipients(response.data); })
-        .catch((requestError) => { if (active) setError(errorMessage(requestError, 'Could not search recipients.')); });
-    }, 250);
-    return () => { active = false; clearTimeout(timer); };
-  }, [recipientSearch, canManage, issueForm.recipient_id]);
 
   useEffect(() => {
     if (!printLabel) return undefined;
@@ -314,8 +298,8 @@ function Inventory() {
   };
   const submitIssuance = async (event) => {
     event.preventDefault();
-    if (issueForm.recipient_type !== 'department' && !issueForm.recipient_id) {
-      setError('Search for and select a recipient before issuing stock.');
+    if (issueForm.recipient_type !== 'department' && !issueForm.recipient_name.trim()) {
+      setError('Enter the recipient name before issuing stock.');
       return;
     }
     await runAction(async () => {
@@ -325,9 +309,7 @@ function Inventory() {
         idempotency_key: transactionKey(),
       });
       setLastReceipt(response.data);
-      setIssueForm({ inventory_id: '', recipient_type: 'student', recipient_id: '', recipient_name: '', department: '', quantity: '1', purpose: '' });
-      setRecipientSearch('');
-      setRecipients([]);
+      setIssueForm({ inventory_id: '', recipient_type: 'student', recipient_name: '', department: '', quantity: '1', purpose: '' });
     }, 'Stock issued and recorded.');
   };
   const submitAdjustment = async (event) => {
@@ -483,11 +465,6 @@ function Inventory() {
         .inventory-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
         .inventory-form-grid label{display:flex;flex-direction:column;gap:.35rem;font-weight:600;color:#334155}
         .inventory-form-grid input,.inventory-form-grid select,.inventory-form-grid textarea{width:100%;min-height:42px}
-        .inventory-recipient-picker{position:relative;display:flex;flex-direction:column;gap:.35rem;font-weight:600;color:#334155}
-        .inventory-recipient-results{position:absolute;z-index:5;top:100%;left:0;right:0;display:grid;max-height:220px;overflow:auto;padding:.25rem;background:#fff;border:1px solid #cbd5e1;border-radius:.4rem;box-shadow:0 8px 20px rgba(15,23,42,.12)}
-        .inventory-recipient-results button,.inventory-recipient-results span{padding:.65rem .75rem;text-align:left;background:#fff;border:0;border-radius:.25rem;color:#1e293b}
-        .inventory-recipient-results button{cursor:pointer}
-        .inventory-recipient-results button:hover,.inventory-recipient-results button:focus{background:#f1f5f9}
         .inventory-actions{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
         .inventory-alert{border-left:4px solid #f59e0b;padding:.75rem 1rem;background:#fffbeb;border-radius:.5rem;margin:.5rem 0}
         .inventory-print-label{display:inline-flex;flex-direction:column;align-items:center;gap:.2rem;padding:1rem;border:1px dashed #94a3b8;min-width:260px;background:#fff;color:#0f172a}
@@ -706,44 +683,10 @@ function Inventory() {
             <div className="panel-heading"><div><p className="eyebrow">Controlled stock out</p><h2>Issue consumables</h2></div></div>
             <div className="inventory-form-grid">
               <label>Item *<select required value={issueForm.inventory_id} onChange={(event) => setIssueForm({ ...issueForm, inventory_id: event.target.value })}><option value="">Select item</option>{consumables.map((item) => <option key={item.id} value={item.id}>{item.item_name} · {item.quantity} {item.unit}</option>)}</select></label>
-              <label>Recipient type *<select value={issueForm.recipient_type} onChange={(event) => { setIssueForm({ ...issueForm, recipient_type: event.target.value, recipient_id: '', recipient_name: '', department: '' }); setRecipients([]); setRecipientSearch(''); }}><option value="student">Student</option><option value="teacher">Teacher</option><option value="employee">Non-teaching staff</option><option value="department">Department</option></select></label>
+              <label>Recipient type *<select value={issueForm.recipient_type} onChange={(event) => setIssueForm({ ...issueForm, recipient_type: event.target.value, recipient_name: '', department: '' })}><option value="student">Student</option><option value="teacher">Teacher</option><option value="employee">Staff member</option><option value="department">Department</option></select></label>
               {issueForm.recipient_type === 'department'
                 ? <label>Department *<input required value={issueForm.department} onChange={(event) => setIssueForm({ ...issueForm, department: event.target.value })} placeholder="e.g. Science Department" /></label>
-                : <div className="inventory-recipient-picker">
-                  <label htmlFor="inventory-recipient-search">{issueForm.recipient_id ? 'Recipient *' : 'Search recipient *'}</label>
-                  <input
-                    id="inventory-recipient-search"
-                    required
-                    value={recipientSearch}
-                    onChange={(event) => {
-                      setRecipientSearch(event.target.value);
-                      setIssueForm({ ...issueForm, recipient_id: '', recipient_name: '' });
-                    }}
-                    placeholder="Type a name or ID"
-                    autoComplete="off"
-                  />
-                  {!issueForm.recipient_id && recipientSearch.trim().length >= 2 && (
-                    <div className="inventory-recipient-results" role="listbox" aria-label="Matching recipients">
-                      {recipients.filter((entry) => entry.type === issueForm.recipient_type).map((entry) => (
-                        <button
-                          key={`${entry.type}-${entry.id}`}
-                          type="button"
-                          role="option"
-                          aria-label={`${entry.name}, ${entry.type}, ID ${entry.identifier}`}
-                          onClick={() => {
-                            setIssueForm({ ...issueForm, recipient_id: String(entry.id), recipient_name: entry.name });
-                            setRecipientSearch(entry.name);
-                            setRecipients([]);
-                          }}
-                        >
-                          {entry.name}
-                        </button>
-                      ))}
-                      {!recipients.some((entry) => entry.type === issueForm.recipient_type) && <span>No matching names found.</span>}
-                    </div>
-                  )}
-                  {issueForm.recipient_id && <small>Selected: {issueForm.recipient_name}</small>}
-                </div>}
+                : <label>Recipient name *<input required maxLength="160" value={issueForm.recipient_name} onChange={(event) => setIssueForm({ ...issueForm, recipient_name: event.target.value })} placeholder="Enter recipient name" /></label>}
               <label>Quantity *<input required type="number" min="1" step="1" value={issueForm.quantity} onChange={(event) => setIssueForm({ ...issueForm, quantity: event.target.value })} /></label>
               <label>Purpose / reference *<input required maxLength="500" value={issueForm.purpose} onChange={(event) => setIssueForm({ ...issueForm, purpose: event.target.value })} placeholder="Class activity, term supplies..." /></label>
             </div>
@@ -864,7 +807,7 @@ function MovementTable({ movements }) {
 
 function IssuanceTable({ issuances, onPrint }) {
   return <div className="table-wrap"><table><thead><tr><th>Reference</th><th>Date</th><th>Recipient</th><th>Items</th><th>Purpose</th><th /></tr></thead><tbody>
-    {issuances.map((issuance) => <tr key={issuance.id}><td>{issuance.reference_number}</td><td>{shortDate(issuance.issued_at)}</td><td>{issuance.recipient_name}<div>{issuance.recipient_type}</div></td><td>{issuance.items.map((item) => `${item.item_name} × ${item.quantity} ${item.unit}`).join(', ')}</td><td>{issuance.purpose}</td><td><button className="btn-small btn-secondary" onClick={() => onPrint({ issuance, item: issuance.items[0], quantity: issuance.items[0]?.quantity })}>Receipt</button></td></tr>)}
+    {issuances.map((issuance) => <tr key={issuance.id}><td>{issuance.reference_number}</td><td>{shortDate(issuance.issued_at)}</td><td>{issuance.recipient_name}<div>{String(issuance.recipient_type).replaceAll('_', ' ')}</div></td><td>{issuance.items.map((item) => `${item.item_name} × ${item.quantity} ${item.unit}`).join(', ')}</td><td>{issuance.purpose}</td><td><button className="btn-small btn-secondary" onClick={() => onPrint({ issuance, item: issuance.items[0], quantity: issuance.items[0]?.quantity })}>Receipt</button></td></tr>)}
   </tbody></table></div>;
 }
 
@@ -873,7 +816,7 @@ function ReceiptCard({ receipt }) {
   const items = receipt.issuance.items?.length
     ? receipt.issuance.items
     : receipt.item ? [{ item_name: receipt.item.item_name, quantity: receipt.quantity }] : [];
-  return <div><h3>The McCarthy Hill School · Stock Issuance</h3><p>Reference: {receipt.issuance.reference_number}</p><p>Recipient: {receipt.issuance.recipient_name} ({receipt.issuance.recipient_type})</p><p>Issued: {shortDate(receipt.issuance.issued_at)}</p><p>Purpose: {receipt.issuance.purpose}</p><table><thead><tr><th>Item</th><th>Quantity</th><th>Balance after issue</th></tr></thead><tbody>{items.map((item) => <tr key={item.inventory_id || item.item_name}><td>{item.item_name}</td><td>{item.quantity}</td><td>{receipt.issuance.items?.length ? '—' : receipt.quantity_after ?? '—'}</td></tr>)}</tbody></table><p>Received by: __________________________ · Signature: __________________________</p></div>;
+  return <div><h3>The McCarthy Hill School · Stock Issuance</h3><p>Reference: {receipt.issuance.reference_number}</p><p>Recipient: {receipt.issuance.recipient_name} ({String(receipt.issuance.recipient_type).replaceAll('_', ' ')})</p><p>Issued: {shortDate(receipt.issuance.issued_at)}</p><p>Purpose: {receipt.issuance.purpose}</p><table><thead><tr><th>Item</th><th>Quantity</th><th>Balance after issue</th></tr></thead><tbody>{items.map((item) => <tr key={item.inventory_id || item.item_name}><td>{item.item_name}</td><td>{item.quantity}</td><td>{receipt.issuance.items?.length ? '—' : receipt.quantity_after ?? '—'}</td></tr>)}</tbody></table><p>Received by: __________________________ · Signature: __________________________</p></div>;
 }
 
 function RequestTable({ requests, canApprove, quantities, setQuantities, onDecision, onFulfill, saving }) {

@@ -421,43 +421,6 @@ const receivePurchaseDelivery = async (req, res, next) => {
   }
 };
 
-const getRecipients = async (req, res, next) => {
-  const query = text(req.query.q, 120);
-  if (query.length < 2) return res.json([]);
-  const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
-  try {
-    const [students, teachers, employees] = await Promise.all([
-      pool.query(
-        `SELECT id, name, id::text AS identifier FROM students
-         WHERE school_id=$1 AND (name ILIKE $2 OR id::text ILIKE $2)
-         ORDER BY name LIMIT 10`,
-        [req.user.school_id, pattern]
-      ),
-      pool.query(
-        `SELECT id, name, id::text AS identifier FROM users
-         WHERE school_id=$1 AND is_active=TRUE AND role='teacher'
-           AND (name ILIKE $2 OR email ILIKE $2 OR id::text ILIKE $2)
-         ORDER BY name LIMIT 10`,
-        [req.user.school_id, pattern]
-      ),
-      pool.query(
-        `SELECT id, full_name AS name, id::text AS identifier FROM employees
-         WHERE school_id=$1 AND is_active=TRUE
-           AND (full_name ILIKE $2 OR email ILIKE $2 OR id::text ILIKE $2)
-         ORDER BY full_name LIMIT 10`,
-        [req.user.school_id, pattern]
-      ),
-    ]);
-    res.json([
-      ...students.rows.map((row) => ({ ...row, type: 'student' })),
-      ...teachers.rows.map((row) => ({ ...row, type: 'teacher' })),
-      ...employees.rows.map((row) => ({ ...row, type: 'employee' })),
-    ]);
-  } catch (error) {
-    next(error);
-  }
-};
-
 const getRequestCatalogue = async (req, res, next) => {
   try {
     const result = await pool.query(
@@ -492,7 +455,7 @@ const getInventoryStaff = async (req, res, next) => {
 
 const issueInventory = async (req, res, next) => {
   const { school_id, id: actorId } = req.user;
-  const { inventory_id, recipient_type, recipient_id, recipient_name, department, quantity, purpose } = req.body;
+  const { inventory_id, recipient_type, recipient_name, department, quantity, purpose } = req.body;
   const inventoryId = positiveInt(inventory_id);
   const qty = positiveInt(quantity);
   const purposeText = text(purpose, 500);
@@ -512,24 +475,8 @@ const issueInventory = async (req, res, next) => {
       if (prior.rows.length) throw fail(409, `This issuance was already processed as ${prior.rows[0].reference_number}.`);
       let recipientId = null;
       let resolvedName = text(recipient_name, 160);
-      if (recipient_type === 'student') {
-        recipientId = positiveInt(recipient_id);
-        const recipient = await client.query('SELECT id, name FROM students WHERE id=$1 AND school_id=$2', [recipientId, school_id]);
-        if (!recipient.rows.length) throw fail(400, 'Select a student from this school.');
-        resolvedName = recipient.rows[0].name;
-      } else if (recipient_type === 'teacher') {
-        recipientId = positiveInt(recipient_id);
-        const recipient = await client.query(`SELECT id, name FROM users WHERE id=$1 AND school_id=$2 AND role='teacher' AND is_active=TRUE`, [recipientId, school_id]);
-        if (!recipient.rows.length) throw fail(400, 'Select an active teacher from this school.');
-        resolvedName = recipient.rows[0].name;
-      } else if (recipient_type === 'employee') {
-        recipientId = positiveInt(recipient_id);
-        const recipient = await client.query('SELECT id, full_name AS name FROM employees WHERE id=$1 AND school_id=$2 AND is_active=TRUE', [recipientId, school_id]);
-        if (!recipient.rows.length) throw fail(400, 'Select an active employee from this school.');
-        resolvedName = recipient.rows[0].name;
-      } else {
+      if (recipient_type === 'department') {
         resolvedName = text(department, 160);
-        if (!resolvedName) throw fail(400, 'Enter a department as the recipient.');
       }
       if (!resolvedName) throw fail(400, 'Recipient name is required.');
 
@@ -1454,7 +1401,7 @@ const searchInventory = async (req, res, next) => {
 module.exports = {
   getInventoryDashboard, listSuppliers, saveSupplier, setSupplierStatus,
   listPurchases, createPurchase, receivePurchaseDelivery,
-  getRecipients, getRequestCatalogue, getInventoryStaff, issueInventory, listIssuances, listAssets, getAssetHistory, registerAsset, adjustAssetQuantity,
+  getRequestCatalogue, getInventoryStaff, issueInventory, listIssuances, listAssets, getAssetHistory, registerAsset, adjustAssetQuantity,
   updateAsset, listMaintenance, createMaintenance, completeMaintenance,
   listRequests, createRequest, decideRequest, fulfillRequest, adjustStock,
   listStocktakes, createStocktake, reconcileStocktake, getInventoryReport,

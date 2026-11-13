@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const pool = require('../config/db');
-const { adjustAssetQuantity } = require('./storeInventoryController');
+const { adjustAssetQuantity, issueInventory } = require('./storeInventoryController');
 
 function createResponse() {
   return {
@@ -30,6 +30,40 @@ function installDatabase(handler) {
   pool.connect = async () => client;
   return { statements, restore: () => { pool.connect = originalConnect; } };
 }
+
+test('issuance saves a manually entered recipient name without looking up an account', async () => {
+  const statements = [];
+  const database = installDatabase((sql, params) => {
+    statements.push({ sql, params });
+    if (sql.includes('SELECT id, reference_number FROM inventory_issuances')) return { rows: [] };
+    if (sql.includes('FROM inventory WHERE id=$1')) {
+      return { rows: [{ id: 8, item_name: 'Paper', item_type: 'consumable', item_status: 'active', quantity: 5, purchase_price: '2' }] };
+    }
+    if (sql.includes('INSERT INTO inventory_issuances')) return { rows: [{ id: 21, recipient_type: 'employee', recipient_name: 'Lydia Annol' }] };
+    if (sql.includes('INSERT INTO inventory_issuance_items')) return { rows: [{ id: 22 }] };
+    if (sql.includes('FROM inventory_stock_batches')) return { rows: [] };
+    return { rows: [], rowCount: 1 };
+  });
+  try {
+    const res = createResponse();
+    await issueInventory({
+      user: { school_id: 3, id: 7 },
+      body: {
+        inventory_id: 8, recipient_type: 'employee', recipient_name: ' Lydia Annol ',
+        quantity: 1, purpose: 'Office supplies', idempotency_key: 'staff-account-issue-1',
+      },
+    }, res, assert.fail);
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.issuance.recipient_type, 'employee');
+    assert.ok(!statements.some(({ sql }) => /FROM (users|employees|students)/.test(sql)));
+    const insert = statements.find(({ sql }) => sql.includes('INSERT INTO inventory_issuances'));
+    assert.equal(insert.params[1], 'employee');
+    assert.equal(insert.params[2], null);
+    assert.equal(insert.params[3], 'Lydia Annol');
+  } finally {
+    database.restore();
+  }
+});
 
 test('adding asset quantity creates individually tracked assets and a stock movement atomically', async () => {
   let nextAssetId = 20;
