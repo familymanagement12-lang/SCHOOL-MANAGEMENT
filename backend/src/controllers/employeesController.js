@@ -49,6 +49,9 @@ const updateEmployee = async (req, res, next) => {
   if (normalizedRole && normalizedRole.length > 80) {
     return res.status(400).json({ message: 'Staff role must be 80 characters or fewer.' });
   }
+  if (is_active !== undefined && typeof is_active !== 'boolean') {
+    return res.status(400).json({ message: 'Staff status must be active or inactive.' });
+  }
 
   try {
     const result = await pool.query(
@@ -66,14 +69,17 @@ const updateEmployee = async (req, res, next) => {
   }
 };
 
-const deleteEmployee = async (req, res, next) => {
+const deactivateEmployee = async (req, res, next) => {
   const { school_id } = req.user;
   const { id } = req.params;
   try {
-    const result = await pool.query('DELETE FROM employees WHERE id = $1 AND school_id = $2 RETURNING *', [id, school_id]);
+    const result = await pool.query(
+      'UPDATE employees SET is_active = FALSE WHERE id = $1 AND school_id = $2 RETURNING id',
+      [id, school_id]
+    );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Employee not found.' });
-    res.json({ message: 'Employee deleted successfully.' });
+    res.json({ message: 'Employee marked inactive. Their payroll and attendance history has been kept.' });
   } catch (error) { next(error); }
 };
 
-module.exports = { getEmployees, createEmployee, updateEmployee, deleteEmployee };
+module.exports = { getEmployees, createEmployee, updateEmployee, deactivateEmployee };

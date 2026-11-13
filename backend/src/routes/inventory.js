@@ -33,6 +33,7 @@ router.post('/adjustments', authorize(storeRoles), store.adjustStock);
 
 router.get('/assets', authorize(storeRoles), store.listAssets);
 router.post('/assets', authorize(storeRoles), store.registerAsset);
+router.patch('/assets/quantity', authorize(storeRoles), store.adjustAssetQuantity);
 router.get('/assets/:id/history', authorize(storeRoles), store.getAssetHistory);
 router.patch('/assets/:id', authorize(storeRoles), store.updateAsset);
 

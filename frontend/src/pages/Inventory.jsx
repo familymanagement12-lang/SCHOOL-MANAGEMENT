@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import {
-  getInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem,
+  getInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, adjustInventoryAssetQuantity,
   getInventoryDashboard, getInventorySuppliers, createInventorySupplier,
   updateInventorySupplier, setInventorySupplierStatus, getInventoryPurchases,
   createInventoryPurchase, receiveInventoryPurchase, getInventoryIssuances,
@@ -81,6 +81,8 @@ function Inventory() {
   const [notice, setNotice] = useState('');
   const [inventoryForm, setInventoryForm] = useState(initialItem);
   const [editingItem, setEditingItem] = useState(null);
+  const [editingAssetCount, setEditingAssetCount] = useState(null);
+  const [assetCountForm, setAssetCountForm] = useState({ target_quantity: '', reason: '', asset_ids: [], event_type: 'missing' });
   const [categoryFilter, setCategoryFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -185,6 +187,12 @@ function Inventory() {
   const activeItems = useMemo(() => inventory.filter((item) => item.item_status === 'active'), [inventory]);
   const consumables = activeItems.filter((item) => item.item_type !== 'asset');
   const assetCatalogue = activeItems.filter((item) => item.item_type === 'asset');
+  const assetCountDifference = editingAssetCount
+    ? Number(assetCountForm.target_quantity) - Number(editingAssetCount.quantity)
+    : 0;
+  const removableAssets = editingAssetCount
+    ? assets.filter((asset) => Number(asset.inventory_id) === Number(editingAssetCount.id) && asset.status === 'available')
+    : [];
   const teacherOptions = users.filter((entry) => entry.role !== 'student');
 
   const runAction = async (action, successMessage) => {
@@ -353,6 +361,40 @@ function Inventory() {
       setAssetForm({ inventory_id: '', asset_code: '', serial_number: '', barcode: '', condition: 'good', location: '', purchase_date: '', purchase_price: '0', notes: '' });
     }, 'Asset registered and added to the catalogue asset count.');
   };
+  const openAssetCountEditor = (item) => {
+    setEditingAssetCount(item);
+    setAssetCountForm({
+      target_quantity: String(item.quantity),
+      reason: '',
+      asset_ids: [],
+      event_type: 'missing',
+    });
+  };
+  const submitAssetCountEdit = async (event) => {
+    event.preventDefault();
+    const targetQuantity = Number(assetCountForm.target_quantity);
+    const difference = targetQuantity - Number(editingAssetCount?.quantity || 0);
+    if (!editingAssetCount || !Number.isSafeInteger(targetQuantity) || targetQuantity < 0) {
+      setError('Enter a whole-number asset quantity of zero or more.');
+      return;
+    }
+    if (difference < 0 && assetCountForm.asset_ids.length !== -difference) {
+      setError(`Select exactly ${-difference} available asset${difference === -1 ? '' : 's'} to remove.`);
+      return;
+    }
+    await runAction(async () => {
+      await adjustInventoryAssetQuantity({
+        inventory_id: editingAssetCount.id,
+        target_quantity: targetQuantity,
+        reason: assetCountForm.reason,
+        event_type: assetCountForm.event_type,
+        asset_ids: assetCountForm.asset_ids,
+        idempotency_key: transactionKey(),
+      });
+      setEditingAssetCount(null);
+      setAssetCountForm({ target_quantity: '', reason: '', asset_ids: [], event_type: 'missing' });
+    }, 'Reusable asset quantity updated with individual history recorded.');
+  };
   const applyAssetAction = (asset, eventType) => runAction(() => updateInventoryAsset(asset.id, {
     ...(assetActionForm[asset.id] || {}),
     event_type: eventType,
@@ -505,6 +547,55 @@ function Inventory() {
         </>}
 
         {tab === 'catalogue' && <section className="split-layout">
+          {editingAssetCount && <form className="data-panel form-panel" style={{ gridColumn: '1 / -1' }} onSubmit={submitAssetCountEdit}>
+            <div className="panel-heading"><div><p className="eyebrow">Store · Asset register</p><h2>Adjust {editingAssetCount.item_name} quantity</h2></div></div>
+            <p>Current quantity: <strong>{editingAssetCount.quantity}</strong>. Each change will update individual asset records and keep the asset history.</p>
+            <div className="inventory-form-grid">
+              <label>New quantity *
+                <input type="number" min="0" step="1" required value={assetCountForm.target_quantity} onChange={(event) => setAssetCountForm({ ...assetCountForm, target_quantity: event.target.value, asset_ids: [] })} />
+              </label>
+              {assetCountDifference > 0 && <p>Increasing by {assetCountDifference} will register {assetCountDifference} individual available assets with generated asset codes and barcodes.</p>}
+              {assetCountDifference < 0 && <>
+                <label>Record removed assets as *
+                  <select value={assetCountForm.event_type} onChange={(event) => setAssetCountForm({ ...assetCountForm, event_type: event.target.value })}>
+                    <option value="missing">Missing</option>
+                    {isAdmin && <option value="disposed">Disposed</option>}
+                  </select>
+                </label>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <strong>Select exactly {-assetCountDifference} available asset{assetCountDifference === -1 ? '' : 's'}:</strong>
+                  {!removableAssets.length && <p className="error">There are no available individual assets to remove for this item.</p>}
+                  {removableAssets.map((asset) => {
+                    const selected = assetCountForm.asset_ids.includes(Number(asset.id));
+                    const selectionFull = assetCountForm.asset_ids.length >= -assetCountDifference;
+                    return <label key={asset.id} style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginTop: '.4rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={!selected && selectionFull}
+                        onChange={(event) => setAssetCountForm((current) => ({
+                          ...current,
+                          asset_ids: event.target.checked
+                            ? [...current.asset_ids, Number(asset.id)]
+                            : current.asset_ids.filter((id) => id !== Number(asset.id)),
+                        }))}
+                      />
+                      {asset.asset_code}{asset.serial_number ? ` · ${asset.serial_number}` : ''}
+                    </label>;
+                  })}
+                </div>
+              </>}
+              <label style={{ gridColumn: '1 / -1' }}>Reason for quantity change *
+                <textarea required minLength="5" maxLength="500" rows="2" value={assetCountForm.reason} onChange={(event) => setAssetCountForm({ ...assetCountForm, reason: event.target.value })} placeholder="Explain the physical count or why these assets were removed." />
+              </label>
+            </div>
+            <div className="inventory-actions">
+              <button type="submit" className="btn-primary" disabled={saving || !assetCountDifference || assetCountForm.reason.trim().length < 5 || (assetCountDifference < 0 && assetCountForm.asset_ids.length !== -assetCountDifference)}>
+                {saving ? 'Saving…' : 'Save quantity'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setEditingAssetCount(null)} disabled={saving}>Cancel</button>
+            </div>
+          </form>}
           {canManage && <form className="data-panel form-panel" onSubmit={saveItem}>
             <div className="panel-heading"><div><p className="eyebrow">{editingItem ? 'Catalogue maintenance' : 'New stock item'}</p><h2>{editingItem ? 'Edit inventory item' : 'Add catalogue item'}</h2></div></div>
             <div className="inventory-form-grid">
@@ -514,7 +605,7 @@ function Inventory() {
               <label>Category *<input maxLength="80" list="inventory-categories" required value={inventoryForm.category} onChange={(event) => setInventoryForm({ ...inventoryForm, category: event.target.value })} /><datalist id="inventory-categories">{categories.map((category) => <option key={category} value={category} />)}</datalist></label>
               <label>Item type<select value={inventoryForm.item_type} onChange={(event) => setInventoryForm({ ...inventoryForm, item_type: event.target.value })}><option value="consumable">Consumable</option><option value="asset">Reusable asset</option></select></label>
               <label>Unit of measurement<input maxLength="40" required value={inventoryForm.unit} onChange={(event) => setInventoryForm({ ...inventoryForm, unit: event.target.value })} placeholder="piece, pack, box, ream" /></label>
-              <label>{editingItem ? 'Current stock balance' : 'Opening stock'}<input type="number" min="0" step="1" required value={inventoryForm.quantity} onChange={(event) => setInventoryForm({ ...inventoryForm, quantity: event.target.value })} /></label>
+              <label>{editingItem ? 'Current stock balance' : 'Opening stock'}<input type="number" min="0" step="1" required disabled={Boolean(editingItem && inventoryForm.item_type === 'asset')} value={inventoryForm.quantity} onChange={(event) => setInventoryForm({ ...inventoryForm, quantity: event.target.value })} />{editingItem && inventoryForm.item_type === 'asset' && <small>Use Edit quantity in the catalogue to adjust the asset register.</small>}</label>
               <label>Minimum stock alert level<input type="number" min="0" step="1" value={inventoryForm.minimum_stock} onChange={(event) => setInventoryForm({ ...inventoryForm, minimum_stock: event.target.value })} /></label>
               <label>Purchase price / unit<input type="number" min="0" step="0.01" value={inventoryForm.purchase_price} onChange={(event) => setInventoryForm({ ...inventoryForm, purchase_price: event.target.value })} /></label>
               <label>Supplier<select value={inventoryForm.supplier_id} onChange={(event) => setInventoryForm({ ...inventoryForm, supplier_id: event.target.value })}><option value="">Not specified</option>{suppliers.filter((supplier) => supplier.is_active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
@@ -540,7 +631,7 @@ function Inventory() {
                 <td>{item.category}<div>{pill(item.item_type || 'consumable')}</div></td>
                 <td><strong>{item.quantity} {item.unit || 'units'}</strong>{item.quantity <= (item.minimum_stock || 0) && item.item_status === 'active' && <div className="inventory-alert">Low stock</div>}</td>
                 <td>{item.minimum_stock || 0}</td><td>{formatMoney(Number(item.quantity || 0) * Number(item.purchase_price || 0))}</td>
-                {canManage && <td><div className="inventory-actions"><button type="button" className="btn-small btn-edit" onClick={() => editItem(item)}>Edit</button><button type="button" className="btn-small btn-secondary" onClick={() => setPrintLabel({ name: item.item_name, value: item.barcode || item.item_code || `MH-ITM-${item.id}` })}>Label</button>{isAdmin && <button type="button" className="btn-small btn-delete" onClick={() => archiveItem(item)}>Archive</button>}</div></td>}
+                {canManage && <td><div className="inventory-actions"><button type="button" className="btn-small btn-edit" onClick={() => editItem(item)}>Edit</button>{item.item_type === 'asset' && <button type="button" className="btn-small btn-secondary" onClick={() => openAssetCountEditor(item)}>Edit quantity</button>}<button type="button" className="btn-small btn-secondary" onClick={() => setPrintLabel({ name: item.item_name, value: item.barcode || item.item_code || `MH-ITM-${item.id}` })}>Label</button>{isAdmin && <button type="button" className="btn-small btn-delete" onClick={() => archiveItem(item)}>Archive</button>}</div></td>}
               </tr>)}</tbody></table></div>
             {!filteredInventory.length && <p className="empty-state">No matching inventory items.</p>}
           </section>

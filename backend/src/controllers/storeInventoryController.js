@@ -690,6 +690,134 @@ const registerAsset = async (req, res, next) => {
   }
 };
 
+const adjustAssetQuantity = async (req, res, next) => {
+  const { school_id: schoolId, id: actorId, role } = req.user;
+  const inventoryId = positiveInt(req.body.inventory_id);
+  const targetQuantity = Number(req.body.target_quantity);
+  const reason = text(req.body.reason, 500);
+  const eventType = req.body.event_type;
+  const key = idempotencyKey(req.body.idempotency_key);
+  if (!inventoryId || !Number.isSafeInteger(targetQuantity) || targetQuantity < 0
+      || reason.length < 5 || !key || !['missing', 'disposed'].includes(eventType)) {
+    return res.status(400).json({ message: 'Choose a valid target quantity, adjustment reason, and asset outcome.' });
+  }
+  if (eventType === 'disposed' && role !== 'admin') {
+    return res.status(403).json({ message: 'Only administrators may dispose of assets.' });
+  }
+  const rawAssetIds = req.body.asset_ids;
+  if (rawAssetIds !== undefined && !Array.isArray(rawAssetIds)) {
+    return res.status(400).json({ message: 'Select the individual assets to remove from the active register.' });
+  }
+  const assetIds = (rawAssetIds || []).map(positiveInt);
+  if (assetIds.some((assetId) => !assetId) || new Set(assetIds).size !== assetIds.length) {
+    return res.status(400).json({ message: 'Select valid, unique asset records.' });
+  }
+
+  try {
+    const result = await transaction(async (client) => {
+      const itemResult = await client.query(
+        `SELECT id, item_name, item_type, item_status, quantity, unit, storage_location, purchase_price
+         FROM inventory WHERE id=$1 AND school_id=$2 FOR UPDATE`,
+        [inventoryId, schoolId]
+      );
+      const item = itemResult.rows[0];
+      if (!item || item.item_type !== 'asset' || item.item_status === 'archived') {
+        throw fail(404, 'Active reusable asset catalogue item not found.');
+      }
+
+      const trackedResult = await client.query(
+        `SELECT id FROM inventory_assets
+         WHERE inventory_id=$1 AND school_id=$2 AND status NOT IN ('missing','disposed')
+         FOR UPDATE`,
+        [inventoryId, schoolId]
+      );
+      const trackedQuantity = trackedResult.rowCount;
+      if (trackedQuantity !== Number(item.quantity)) {
+        throw fail(409, `The catalogue shows ${item.quantity} units but the asset register has ${trackedQuantity}. Reconcile the asset register before changing this quantity.`);
+      }
+      const difference = targetQuantity - trackedQuantity;
+      if (difference === 0) return { quantity: trackedQuantity, added: 0, removed: 0 };
+      if (Math.abs(difference) > 1000) {
+        throw fail(400, 'Adjust no more than 1,000 reusable assets at a time.');
+      }
+
+      if (difference > 0) {
+        const createdAssets = [];
+        for (let index = 0; index < difference; index += 1) {
+          const assetCode = `ASSET-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
+          const asset = await client.query(
+            `INSERT INTO inventory_assets
+               (school_id, inventory_id, asset_code, barcode, condition, status, location,
+                purchase_price, notes, created_by)
+             VALUES ($1,$2,$3,$3,'good','available',$4,$5,$6,$7)
+             RETURNING id, asset_code, condition, notes`,
+            [schoolId, inventoryId, assetCode, item.storage_location,
+              item.purchase_price, `Added from Store quantity edit: ${reason}`, actorId]
+          );
+          createdAssets.push(asset.rows[0]);
+          await client.query(
+            `INSERT INTO inventory_asset_events (school_id, asset_id, event_type, condition, notes, actor_id)
+             VALUES ($1,$2,'registered',$3,$4,$5)`,
+            [schoolId, asset.rows[0].id, asset.rows[0].condition, reason, actorId]
+          );
+        }
+        await client.query(
+          'UPDATE inventory SET quantity=$1 WHERE id=$2 AND school_id=$3',
+          [targetQuantity, inventoryId, schoolId]
+        );
+        await recordMovement(client, {
+          schoolId, inventoryId, type: 'asset_register', change: difference,
+          quantityAfter: targetQuantity, unitPrice: item.purchase_price,
+          referenceType: 'asset_quantity_adjustment', referenceId: inventoryId,
+          key, actorId, reason,
+        });
+        return { quantity: targetQuantity, added: createdAssets.length, removed: 0 };
+      }
+
+      const quantityToRemove = -difference;
+      if (assetIds.length !== quantityToRemove) {
+        throw fail(400, `Select exactly ${quantityToRemove} individual available asset${quantityToRemove === 1 ? '' : 's'} to remove.`);
+      }
+      const selectedAssets = await client.query(
+        `SELECT id FROM inventory_assets
+         WHERE inventory_id=$1 AND school_id=$2 AND id=ANY($3::bigint[]) AND status='available'
+         FOR UPDATE`,
+        [inventoryId, schoolId, assetIds]
+      );
+      if (selectedAssets.rowCount !== quantityToRemove) {
+        throw fail(409, 'Only available assets from this catalogue item can be removed. Return or resolve assigned assets first.');
+      }
+      for (const asset of selectedAssets.rows) {
+        await client.query(
+          `UPDATE inventory_assets SET status=$1, condition=$2,
+             notes=concat_ws(E'\\n',NULLIF(notes,''),$3), updated_at=NOW()
+           WHERE id=$4 AND school_id=$5`,
+          [eventType, eventType, reason, asset.id, schoolId]
+        );
+        await client.query(
+          `INSERT INTO inventory_asset_events (school_id, asset_id, event_type, condition, notes, actor_id)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [schoolId, asset.id, eventType, eventType, reason, actorId]
+        );
+      }
+      await client.query(
+        'UPDATE inventory SET quantity=$1 WHERE id=$2 AND school_id=$3',
+        [targetQuantity, inventoryId, schoolId]
+      );
+      await recordMovement(client, {
+        schoolId, inventoryId, type: eventType === 'disposed' ? 'adjustment' : 'damage',
+        change: difference, quantityAfter: targetQuantity, unitPrice: item.purchase_price,
+        referenceType: 'asset_quantity_adjustment', referenceId: inventoryId,
+        key, actorId, reason,
+      });
+      return { quantity: targetQuantity, added: 0, removed: selectedAssets.rowCount };
+    });
+    res.json({ message: 'Asset quantity updated with individual history recorded.', ...result });
+  } catch (error) {
+    respondError(error, res, next);
+  }
+};
+
 const updateAsset = async (req, res, next) => {
   const { school_id, id: actorId } = req.user;
   const assetId = positiveInt(req.params.id);
@@ -714,6 +842,16 @@ const updateAsset = async (req, res, next) => {
   }
   try {
     const result = await transaction(async (client) => {
+      if (removesStock) {
+        const inventory = await client.query(
+          `SELECT i.id FROM inventory i
+           WHERE i.id=(SELECT inventory_id FROM inventory_assets WHERE id=$1 AND school_id=$2)
+             AND i.school_id=$2
+           FOR UPDATE`,
+          [assetId, school_id]
+        );
+        if (!inventory.rows.length) throw fail(404, 'Asset not found.');
+      }
       const asset = await client.query(
         `SELECT * FROM inventory_assets WHERE id=$1 AND school_id=$2 FOR UPDATE`,
         [assetId, school_id]
@@ -1316,7 +1454,7 @@ const searchInventory = async (req, res, next) => {
 module.exports = {
   getInventoryDashboard, listSuppliers, saveSupplier, setSupplierStatus,
   listPurchases, createPurchase, receivePurchaseDelivery,
-  getRecipients, getRequestCatalogue, getInventoryStaff, issueInventory, listIssuances, listAssets, getAssetHistory, registerAsset,
+  getRecipients, getRequestCatalogue, getInventoryStaff, issueInventory, listIssuances, listAssets, getAssetHistory, registerAsset, adjustAssetQuantity,
   updateAsset, listMaintenance, createMaintenance, completeMaintenance,
   listRequests, createRequest, decideRequest, fulfillRequest, adjustStock,
   listStocktakes, createStocktake, reconcileStocktake, getInventoryReport,

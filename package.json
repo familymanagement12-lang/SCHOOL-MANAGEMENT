@@ -24,7 +24,7 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
     "check:backend": "node scripts/check_backend.js",
-    "test": "node --test backend/src/services/*.test.js"
+    "test": "node --test backend/src/services/*.test.js backend/src/controllers/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

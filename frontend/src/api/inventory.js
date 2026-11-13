@@ -21,6 +21,7 @@ export const issueInventory = (data) => api.post('/inventory/issuances', data);
 export const adjustInventoryStock = (data) => api.post('/inventory/adjustments', data);
 export const getInventoryAssets = () => api.get('/inventory/assets');
 export const registerInventoryAsset = (data) => api.post('/inventory/assets', data);
+export const adjustInventoryAssetQuantity = (data) => api.patch('/inventory/assets/quantity', data);
 export const updateInventoryAsset = (id, data) => api.patch(`/inventory/assets/${id}`, data);
 export const getInventoryAssetHistory = (id) => api.get(`/inventory/assets/${id}/history`);
 export const getInventoryMaintenance = () => api.get('/inventory/maintenance');

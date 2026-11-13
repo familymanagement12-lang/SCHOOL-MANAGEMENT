@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { getEmployees, createEmployee, updateEmployee, deleteEmployee } from '../api/employees';
+import { getEmployees, createEmployee, updateEmployee, deactivateEmployee } from '../api/employees';
 
 const STAFF_ROLES = [
   'Teacher',
@@ -91,13 +91,22 @@ function Employees() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this employee profile? This may affect historical payroll records.')) return;
+  const handleDelete = async (employee) => {
+    if (!window.confirm(`Mark ${employee.full_name} as inactive? Their payroll and attendance history will be kept.`)) return;
     try {
-      await deleteEmployee(id);
+      await deactivateEmployee(employee.id);
       await fetchEmployees();
     } catch (err) {
-      setError('Failed to delete employee.');
+      setError(err.response?.data?.message || 'Failed to mark employee inactive.');
+    }
+  };
+
+  const handleReactivate = async (employee) => {
+    try {
+      await updateEmployee(employee.id, { is_active: true });
+      await fetchEmployees();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reactivate employee.');
     }
   };
 
@@ -194,7 +203,14 @@ function Employees() {
                       <td><strong style={{ color: '#059669' }}>{formatMoney(Number(emp.basic_salary) + Number(emp.allowance) - Number(emp.deductions))}</strong></td>
                       <td><span style={{ fontSize: '0.85rem' }}>{emp.bank_name || '-'}<br/>{emp.bank_account || ''}</span></td>
                       <td><span className={`status-pill ${emp.is_active ? 'present' : 'absent'}`}>{emp.is_active ? 'Active' : 'Inactive'}</span></td>
-                      <td><button className="btn-small btn-edit" onClick={() => handleEdit(emp)}>Edit</button></td>
+                      <td>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          <button type="button" className="btn-small btn-edit" onClick={() => handleEdit(emp)}>Edit</button>
+                          {emp.is_active
+                            ? <button type="button" className="btn-small btn-delete" onClick={() => handleDelete(emp)}>Deactivate</button>
+                            : <button type="button" className="btn-small btn-secondary" onClick={() => handleReactivate(emp)}>Reactivate</button>}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
