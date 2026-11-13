@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { getImportedFinanceFigures } from '../api/feeding';
 import FeedingWorkbookArchive from '../components/FeedingWorkbookArchive';
 import ImportedWorkbookHistory from '../components/ImportedWorkbookHistory';
+import MarketingIncomePanel from '../components/MarketingIncomePanel';
+import MarketStockOperations from '../components/MarketStockOperations';
 
 const workbookBySection = {
   market: {
@@ -107,6 +109,8 @@ function FeedingWorkbookSection({ section }) {
           )}
         </section>
 
+        {section === 'market' && <MarketStockOperations />}
+        {section === 'marketing' && <MarketingIncomePanel />}
         <ImportedWorkbookHistory modules={[section]} />
         <FeedingWorkbookArchive />
       </div>

@@ -8,6 +8,7 @@ const {
   approveTuckshopProductPurchase,
   createCalendarEvent,
   createKitchenPurchase,
+  createMarketStockItem,
   createShoppingAdvance,
   createTuckshopProductPurchase,
   createTuckshopSale,
@@ -17,6 +18,7 @@ const {
   getFeedingReceipt,
   getFeedingRegister,
   getFeedingReport,
+  getMarketingIncome,
   getImportedFinanceFigures,
   getImportedWorkbooks,
   downloadImportedWorkbook,
@@ -29,6 +31,7 @@ const {
   getTuckshopSales,
   getTuckshopDailyReconciliation,
   recordFeedingPayment,
+  recordMarketingIncome,
   reconcileShoppingAdvance,
   saveTuckshopDailyReconciliation,
   saveKitchenStock,
@@ -62,6 +65,22 @@ const purchasePurpose = (purpose) => (req, res, next) => {
   }
   next();
 };
+const marketPurchaseScope = (req, res, next) => {
+  req.marketPurchasesOnly = true;
+  req.expectedPurchasePurpose = 'feeding';
+  req.expectedPurchaseCategory = 'Market Charges';
+  if (req.method === 'POST' && req.path.endsWith('/purchases')) {
+    if (req.body.purpose !== 'feeding' || req.body.expense_category !== 'Market Charges'
+        || !Array.isArray(req.body.items) || req.body.items.some((item) => !item?.stock_item_id)) {
+      return res.status(400).json({ message: 'Market purchases must use Market Charges and select a stock item for every line.' });
+    }
+  }
+  next();
+};
+const marketAdvanceScope = (req, res, next) => {
+  req.marketAdvancesOnly = true;
+  next();
+};
 
 router.get('/classes', authorizeAnyPermission('feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.create'), getFeedingClasses);
 router.put('/classes/:classId/rate', authorizePermission('feeding.rates.manage'), setFeedingRate);
@@ -75,6 +94,8 @@ router.get('/payments/:id/receipt', authorizePermission('feeding.payments.read')
 router.get('/register', authorizeAnyPermission('feeding.register.read', 'feeding.register.manage'), getFeedingRegister);
 router.put('/register/:id', authorizePermission('feeding.register.manage'), updateFeedingRegister);
 router.get('/reports', authorizeAnyPermission('feeding.reports.read', 'tuckshop.reports.read'), getFeedingReport);
+router.get('/marketing/income', authorizeAnyPermission('feeding.marketing.read', 'feeding.marketing.manage'), getMarketingIncome);
+router.post('/marketing/income', authorizePermission('feeding.marketing.manage'), recordMarketingIncome);
 router.get('/imported-finance', authorizeAnyPermission('feeding.reports.read', 'tuckshop.reports.read', 'feeding.market.read', 'feeding.market.manage', 'feeding.marketing.read', 'feeding.marketing.manage'), getImportedFinanceFigures);
 router.get('/workbooks', authorizeAnyPermission('feeding.reports.read', 'tuckshop.reports.read', 'feeding.market.read', 'feeding.market.manage', 'feeding.marketing.read', 'feeding.marketing.manage', 'feeding.import.review'), getImportedWorkbooks);
 router.get('/workbooks/:id/download', authorizeAnyPermission('feeding.reports.read', 'tuckshop.reports.read', 'feeding.market.read', 'feeding.market.manage', 'feeding.marketing.read', 'feeding.marketing.manage', 'feeding.import.review'), downloadImportedWorkbook);
@@ -90,6 +111,14 @@ router.get('/history/:module', authorizeAnyPermission(
   'feeding.market.read', 'feeding.market.manage', 'feeding.marketing.read',
   'feeding.marketing.manage'
 ), feedingImportController.getHistoricalWorkbookRows);
+router.get('/market/stock', authorizeAnyPermission('feeding.market.read', 'feeding.market.manage'), getKitchenStock);
+router.post('/market/stock', authorizePermission('feeding.market.manage'), createMarketStockItem);
+router.get('/market/purchases', authorizeAnyPermission('feeding.market.read', 'feeding.market.manage'), marketPurchaseScope, getKitchenPurchases);
+router.post('/market/purchases', authorizePermission('feeding.market.manage'), marketPurchaseScope, createKitchenPurchase);
+router.post('/market/purchases/:id/approve', authorizePermission('feeding.market.manage'), marketPurchaseScope, approveKitchenPurchase);
+router.get('/market/advances', authorizeAnyPermission('feeding.market.read', 'feeding.market.manage'), marketAdvanceScope, getShoppingAdvances);
+router.post('/market/advances', authorizePermission('feeding.market.manage'), marketAdvanceScope, createShoppingAdvance);
+router.put('/market/advances/:id/reconcile', authorizePermission('feeding.market.manage'), marketAdvanceScope, reconcileShoppingAdvance);
 router.get('/advances', authorizePermission('feeding.advances.manage'), getShoppingAdvances);
 router.post('/advances', authorizePermission('feeding.advances.manage'), createShoppingAdvance);
 router.put('/advances/:id/reconcile', authorizePermission('feeding.advances.manage'), reconcileShoppingAdvance);

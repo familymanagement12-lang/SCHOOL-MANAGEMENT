@@ -34,6 +34,69 @@ const getFeedingClasses = async (req, res, next) => {
   }
 };
 
+const getMarketingIncome = async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT i.id, i.income_date, i.academic_year, i.term, i.amount, i.income_source, i.description,
+              i.payment_method, i.reference, i.created_at, u.name AS recorded_by_name
+       FROM feeding_marketing_income i
+       LEFT JOIN users u ON u.id = i.recorded_by
+       WHERE i.school_id = $1
+       ORDER BY i.income_date DESC, i.id DESC
+       LIMIT 1000`,
+      [req.user.school_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const recordMarketingIncome = async (req, res, next) => {
+  const amountCents = moneyToCents(req.body.amount);
+  const incomeDate = req.body.income_date || today();
+  const academicYear = String(req.body.academic_year || '').trim() || null;
+  const term = String(req.body.term || '').trim() || null;
+  const incomeSource = String(req.body.income_source || '').trim();
+  const description = String(req.body.description || '').trim();
+  const paymentMethod = String(req.body.payment_method || 'cash');
+  const reference = String(req.body.reference || '').trim() || null;
+  const idempotencyKey = String(req.body.idempotency_key || '').trim();
+  if (amountCents === null || amountCents <= 0 || !parseDate(incomeDate)
+      || (academicYear && !/^\d{4}[-_/]\d{4}$/.test(academicYear))
+      || (term && (!['Term 1', 'Term 2', 'Term 3'].includes(term) || !academicYear))
+      || !incomeSource || incomeSource.length > 120 || !description || description.length > 500
+      || !['cash', 'mobile_money', 'bank_transfer', 'other'].includes(paymentMethod)
+      || !idempotencyKey || idempotencyKey.length > 200
+      || (reference && reference.length > 120)) {
+    return res.status(400).json({ message: 'Provide a valid date, positive amount, source, description, payment method and request key.' });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO feeding_marketing_income (
+         school_id, income_date, academic_year, term, amount, income_source, description,
+         payment_method, reference, recorded_by, idempotency_key
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (school_id, idempotency_key) DO NOTHING
+       RETURNING id, income_date, academic_year, term, amount, income_source, description, payment_method, reference, created_at`,
+      [
+        req.user.school_id, incomeDate, academicYear, term, amountFromCents(amountCents), incomeSource,
+        description, paymentMethod, reference, req.user.id, idempotencyKey,
+      ]
+    );
+    if (result.rows.length) return res.status(201).json(result.rows[0]);
+    const duplicate = await pool.query(
+      `SELECT id, income_date, academic_year, term, amount, income_source, description, payment_method, reference, created_at
+       FROM feeding_marketing_income
+       WHERE school_id = $1 AND idempotency_key = $2`,
+      [req.user.school_id, idempotencyKey]
+    );
+    return res.status(200).json(duplicate.rows[0]);
+  } catch (error) {
+    return errorResponse(res, error, next);
+  }
+};
+
 const setFeedingRate = async (req, res, next) => {
   const rateCents = moneyToCents(req.body.daily_rate);
   if (rateCents === null || rateCents <= 0) return res.status(400).json({ message: 'Daily feeding rate must be a positive amount.' });
@@ -979,10 +1042,13 @@ const createTuckshopProductPurchase = async (req, res, next) => {
 
     if (advanceId) {
       const advance = await client.query(
-        'SELECT id FROM shopping_advances WHERE school_id = $1 AND id = $2 FOR UPDATE',
+        'SELECT id, purpose FROM shopping_advances WHERE school_id = $1 AND id = $2 FOR UPDATE',
         [req.user.school_id, advanceId]
       );
       if (!advance.rows.length) throw fail(400, 'The selected shopping advance was not found.');
+      if (String(advance.rows[0].purpose).startsWith('Market stock: ')) {
+        throw fail(400, 'Market stock advances can only be linked to Market Stock purchases.');
+      }
     }
     const productIds = [...new Set(normalizedItems.map((item) => item.productId))];
     const products = await client.query(
@@ -1247,8 +1313,10 @@ const getShoppingAdvances = async (req, res, next) => {
          FROM tuckshop_product_purchases WHERE school_id = a.school_id AND advance_id = a.id
        ) t ON TRUE
        WHERE a.school_id = $1
+         AND (($2::BOOLEAN AND a.purpose LIKE 'Market stock: %')
+           OR (NOT $2::BOOLEAN AND a.purpose NOT LIKE 'Market stock: %'))
        ORDER BY a.issued_date DESC, a.id DESC LIMIT 500`,
-      [req.user.school_id]
+      [req.user.school_id, Boolean(req.marketAdvancesOnly)]
     );
     res.json(result.rows);
   } catch (error) {
@@ -1261,10 +1329,14 @@ const createShoppingAdvance = async (req, res, next) => {
   const issuedDate = req.body.issued_date || today();
   const idempotencyKey = String(req.body.idempotency_key || '').trim();
   const recipientName = String(req.body.recipient_name || '').trim();
-  const purpose = String(req.body.purpose || '').trim();
+  const requestedPurpose = String(req.body.purpose || '').trim();
+  const purpose = req.marketAdvancesOnly ? `Market stock: ${requestedPurpose}` : requestedPurpose;
   if (amountCents === null || amountCents <= 0 || !parseDate(issuedDate)
-      || !idempotencyKey || !recipientName || !purpose) {
+      || !idempotencyKey || !recipientName || !purpose || purpose.length > 200) {
     return res.status(400).json({ message: 'Provide an amount, recipient, date, purpose and idempotency key.' });
+  }
+  if (!req.marketAdvancesOnly && purpose.startsWith('Market stock: ')) {
+    return res.status(400).json({ message: 'Market advances must be created from the Market Stock workspace.' });
   }
   try {
     const result = await pool.query(
@@ -1284,6 +1356,10 @@ const createShoppingAdvance = async (req, res, next) => {
         'SELECT id, amount_issued, recipient_name, issued_date, purpose, returned_amount, notes FROM shopping_advances WHERE school_id = $1 AND idempotency_key = $2',
         [req.user.school_id, idempotencyKey]
       );
+      const duplicateIsMarket = String(duplicate.rows[0]?.purpose || '').startsWith('Market stock: ');
+      if (duplicateIsMarket !== Boolean(req.marketAdvancesOnly)) {
+        return res.status(409).json({ message: 'This request key is already used in a different operational workspace.' });
+      }
       return res.status(200).json(duplicate.rows[0]);
     }
     res.status(201).json(result.rows[0]);
@@ -1300,8 +1376,12 @@ const reconcileShoppingAdvance = async (req, res, next) => {
     client = await pool.connect();
     await client.query('BEGIN');
     const advanceResult = await client.query(
-      'SELECT * FROM shopping_advances WHERE school_id = $1 AND id = $2 FOR UPDATE',
-      [req.user.school_id, req.params.id]
+      `SELECT * FROM shopping_advances
+       WHERE school_id = $1 AND id = $2
+         AND (($3::BOOLEAN AND purpose LIKE 'Market stock: %')
+           OR (NOT $3::BOOLEAN AND purpose NOT LIKE 'Market stock: %'))
+       FOR UPDATE`,
+      [req.user.school_id, req.params.id, Boolean(req.marketAdvancesOnly)]
     );
     if (!advanceResult.rows.length) throw fail(404, 'Shopping advance not found.');
     const advance = advanceResult.rows[0];
@@ -1380,9 +1460,32 @@ const saveKitchenStock = async (req, res, next) => {
   }
 };
 
+const createMarketStockItem = async (req, res, next) => {
+  const name = String(req.body.name || '').trim();
+  const unit = String(req.body.unit || '').trim();
+  const minimum = Number(req.body.minimum_quantity || 0);
+  if (!name || name.length > 120 || !unit || unit.length > 40
+      || !Number.isFinite(minimum) || minimum < 0) {
+    return res.status(400).json({ message: 'Provide an item name, unit, and valid minimum stock quantity.' });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO kitchen_stock_items (school_id, name, unit, quantity, minimum_quantity, updated_by)
+       VALUES ($1, $2, $3, 0, $4, $5)
+       RETURNING id, name, unit, quantity, minimum_quantity`,
+      [req.user.school_id, name, unit, minimum, req.user.id]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    return errorResponse(res, error, next);
+  }
+};
+
 const getKitchenPurchases = async (req, res, next) => {
   try {
-    const permittedPurposes = req.user.role === 'admin'
+    const permittedPurposes = req.marketPurchasesOnly
+      ? ['feeding']
+      : req.user.role === 'admin'
       ? ['feeding', 'kitchen']
       : (await pool.query(
         `SELECT permission FROM user_permissions
@@ -1413,9 +1516,11 @@ const getKitchenPurchases = async (req, res, next) => {
        LEFT JOIN kitchen_purchase_items i ON i.purchase_id = p.id AND i.school_id = p.school_id
        LEFT JOIN kitchen_stock_items stock ON stock.id = i.stock_item_id AND stock.school_id = i.school_id
        WHERE p.school_id = $1 AND p.purpose = ANY($2::TEXT[])
+         AND (($3::BOOLEAN AND p.expense_category = 'Market Charges')
+           OR (NOT $3::BOOLEAN AND p.expense_category <> 'Market Charges'))
        GROUP BY p.id, u.name, a.name
        ORDER BY p.purchase_date DESC, p.id DESC LIMIT 500`,
-      [req.user.school_id, uniquePurposes]
+      [req.user.school_id, uniquePurposes, Boolean(req.marketPurchasesOnly)]
     );
     res.json(result.rows);
   } catch (error) {
@@ -1434,6 +1539,10 @@ const createKitchenPurchase = async (req, res, next) => {
   ];
   const expenseCategory = req.body.expense_category
     || (purpose === 'feeding' ? 'Feeding Supplies' : 'Kitchen Supplies');
+  if ((req.marketPurchasesOnly && (purpose !== 'feeding' || expenseCategory !== 'Market Charges'))
+      || (!req.marketPurchasesOnly && expenseCategory === 'Market Charges')) {
+    return res.status(400).json({ message: 'Market Charges purchases must be recorded from the Market Stock workspace.' });
+  }
   if (!['feeding', 'kitchen'].includes(purpose) || !parseDate(purchaseDate || today())
       || !Array.isArray(items) || !items.length || items.length > 100 || !idempotencyKey
       || items.some((item) => !item || typeof item !== 'object')
@@ -1499,19 +1608,32 @@ const createKitchenPurchase = async (req, res, next) => {
       [String(req.user.school_id), idempotencyKey]
     );
     const duplicate = await client.query(
-      'SELECT id, status, total_amount FROM kitchen_purchases WHERE school_id = $1 AND idempotency_key = $2',
+      'SELECT id, status, total_amount, purpose, expense_category FROM kitchen_purchases WHERE school_id = $1 AND idempotency_key = $2',
       [req.user.school_id, idempotencyKey]
     );
     if (duplicate.rows.length) {
+      const prior = duplicate.rows[0];
+      if (prior.purpose !== purpose || prior.expense_category !== expenseCategory
+          || (prior.expense_category === 'Market Charges') !== Boolean(req.marketPurchasesOnly)) {
+        throw fail(409, 'This request key is already used in a different operational purchase workspace.');
+      }
       await client.query('COMMIT');
-      return res.status(200).json(duplicate.rows[0]);
+      return res.status(200).json({
+        id: prior.id,
+        status: prior.status,
+        total_amount: prior.total_amount,
+      });
     }
     if (advanceId) {
       const advance = await client.query(
-        'SELECT id FROM shopping_advances WHERE school_id = $1 AND id = $2 FOR UPDATE',
+        'SELECT id, purpose FROM shopping_advances WHERE school_id = $1 AND id = $2 FOR UPDATE',
         [req.user.school_id, advanceId]
       );
       if (!advance.rows.length) throw fail(400, 'The selected shopping advance was not found.');
+      const isMarketAdvance = String(advance.rows[0].purpose).startsWith('Market stock: ');
+      if (isMarketAdvance !== Boolean(req.marketPurchasesOnly)) {
+        throw fail(400, 'The selected shopping advance belongs to a different operational workspace.');
+      }
     }
     const ids = [...new Set(normalizedItems.map((item) => item.stockItemId).filter(Boolean))];
     const stockItems = await client.query(
@@ -1587,6 +1709,12 @@ const approveKitchenPurchase = async (req, res, next) => {
     if (!purchase.rows.length) throw fail(404, 'Kitchen purchase not found.');
     const row = purchase.rows[0];
     if (row.purpose !== req.expectedPurchasePurpose) throw fail(403, 'You do not have permission to approve this purchase type.');
+    if (req.expectedPurchaseCategory && row.expense_category !== req.expectedPurchaseCategory) {
+      throw fail(403, 'You do not have permission to approve this purchase category.');
+    }
+    if (row.expense_category === 'Market Charges' && !req.expectedPurchaseCategory) {
+      throw fail(403, 'Market purchases must be approved from the Market Stock workspace.');
+    }
     if (row.status === 'approved') {
       await client.query('COMMIT');
       return res.json(row);
@@ -1646,6 +1774,7 @@ module.exports = {
   approveTuckshopProductPurchase,
   createCalendarEvent,
   createKitchenPurchase,
+  createMarketStockItem,
   createShoppingAdvance,
   createTuckshopProductPurchase,
   createTuckshopSale,
@@ -1655,6 +1784,7 @@ module.exports = {
   getFeedingReceipt,
   getFeedingRegister,
   getFeedingReport,
+  getMarketingIncome,
   getImportedFinanceFigures,
   getImportedWorkbooks,
   downloadImportedWorkbook,
@@ -1667,6 +1797,7 @@ module.exports = {
   getTuckshopSales,
   getTuckshopDailyReconciliation,
   recordFeedingPayment,
+  recordMarketingIncome,
   reconcileShoppingAdvance,
   saveTuckshopDailyReconciliation,
   saveKitchenStock,

@@ -14,6 +14,8 @@ export const updateFeedingRegister = (id, is_served) => api.put(`/feeding/regist
 export const getFeedingReport = (startDate, endDate) => api.get('/feeding/reports', { params: { startDate, endDate } });
 export const getFeedingWorkbooks = () => api.get('/feeding/workbooks');
 export const getImportedFinanceFigures = () => api.get('/feeding/imported-finance');
+export const getMarketingIncome = () => api.get('/feeding/marketing/income');
+export const recordMarketingIncome = (data) => api.post('/feeding/marketing/income', data);
 export const downloadFeedingWorkbook = (id, fileName) => api.get(`/feeding/workbooks/${id}/download`, {
   responseType: 'blob',
 }).then((response) => {
@@ -50,6 +52,17 @@ export const downloadWorkbookImport = (id) => api.get(`/feeding/imports/${id}/do
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 export const getImportedWorkbookRows = (module) => api.get(`/feeding/history/${module}`);
+export const getMarketStock = () => api.get('/feeding/market/stock');
+export const createMarketStockItem = (data) => api.post('/feeding/market/stock', data);
+export const getMarketPurchases = () => api.get('/feeding/market/purchases');
+export const createMarketPurchase = (data) => api.post('/feeding/market/purchases', data);
+export const approveMarketPurchase = (id) => api.post(`/feeding/market/purchases/${id}/approve`);
+export const getMarketAdvances = () => api.get('/feeding/market/advances');
+export const createMarketAdvance = (data) => api.post('/feeding/market/advances', data);
+export const reconcileMarketAdvance = (id, returned_amount) => api.put(
+  `/feeding/market/advances/${id}/reconcile`,
+  { returned_amount }
+);
 export const getShoppingAdvances = () => api.get('/feeding/advances');
 export const createShoppingAdvance = (data) => api.post('/feeding/advances', data);
 export const reconcileShoppingAdvance = (id, returned_amount) => api.put(`/feeding/advances/${id}/reconcile`, { returned_amount });
