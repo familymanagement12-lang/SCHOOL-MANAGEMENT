@@ -11,6 +11,7 @@ const OPERATIONAL_PERMISSIONS = [
   'feeding.purchases.create',
   'feeding.purchases.read',
   'feeding.purchases.approve',
+  'feeding.advances.manage',
   'feeding.reports.read',
   'tuckshop.access',
   'tuckshop.products.read',
@@ -22,6 +23,7 @@ const OPERATIONAL_PERMISSIONS = [
   'tuckshop.purchases.create',
   'tuckshop.purchases.read',
   'tuckshop.purchases.approve',
+  'tuckshop.sales.reconcile',
   'tuckshop.reports.read',
 ];
 

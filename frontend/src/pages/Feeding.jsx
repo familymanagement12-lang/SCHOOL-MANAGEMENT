@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   createCalendarEvent, deleteCalendarEvent, getCalendarEvents, getFeedingClasses, getFeedingPayments,
   getFeedingReceipt, getFeedingRegister, getFeedingReport, getKitchenPurchases,
-  getKitchenStock, createKitchenPurchase, approveKitchenPurchase, recordFeedingPayment,
+  getKitchenStock, createKitchenPurchase, approveKitchenPurchase, createShoppingAdvance,
+  getShoppingAdvances, reconcileShoppingAdvance, recordFeedingPayment,
   searchFeedingStudents, setFeedingRate, updateFeedingRegister,
 } from '../api/feeding';
 import { hasOperationalPermission } from '../utils/operationalPermissions';
@@ -26,6 +27,7 @@ function Feeding() {
   const canCalendarRead = can('feeding.access', 'feeding.calendar.manage');
   const canFeedingPurchases = can('feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve');
   const canFeedingPurchaseCreate = can('feeding.purchases.create');
+  const canAdvanceManage = can('feeding.advances.manage');
   const canReport = can('feeding.reports.read', 'tuckshop.reports.read');
 
   const [classes, setClasses] = useState([]);
@@ -34,7 +36,13 @@ function Feeding() {
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [feedingPurchases, setFeedingPurchases] = useState([]);
   const [kitchenStock, setKitchenStock] = useState([]);
-  const [purchaseForm, setPurchaseForm] = useState({ purchase_date: today(), supplier: '', reference: '', stock_item_id: '', quantity: '1', unit_cost: '' });
+  const [advances, setAdvances] = useState([]);
+  const [advanceForm, setAdvanceForm] = useState({
+    amount_issued: '', recipient_name: '', issued_date: today(), purpose: '', notes: '',
+  });
+  const [advanceKey, setAdvanceKey] = useState(newIdempotencyKey());
+  const [advanceReturns, setAdvanceReturns] = useState({});
+  const [purchaseForm, setPurchaseForm] = useState({ purchase_date: today(), supplier: '', reference: '', stock_item_id: '', quantity: '1', unit_cost: '', advance_id: '' });
   const [purchaseKey, setPurchaseKey] = useState(newIdempotencyKey());
   const [report, setReport] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -42,6 +50,8 @@ function Feeding() {
   const [studentSearch, setStudentSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [amount, setAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentReference, setPaymentReference] = useState('');
   const [paymentKey, setPaymentKey] = useState(newIdempotencyKey());
   const [paymentDate, setPaymentDate] = useState(today());
   const [registerDate, setRegisterDate] = useState(today());
@@ -78,6 +88,7 @@ function Feeding() {
     if (canCalendarRead) tasks.push(getCalendarEvents().then((response) => active && setCalendarEvents(response.data)));
     if (canFeedingPurchases) tasks.push(getKitchenPurchases().then((response) => active && setFeedingPurchases(response.data)));
     if (canFeedingPurchaseCreate || can('feeding.purchases.approve')) tasks.push(getKitchenStock().then((response) => active && setKitchenStock(response.data)));
+    if (canAdvanceManage) tasks.push(getShoppingAdvances().then((response) => active && setAdvances(response.data)));
     Promise.all(tasks)
       .catch((err) => active && setError(err.response?.data?.message || 'Unable to load feeding information.'))
       .finally(() => active && setLoading(false));
@@ -122,11 +133,14 @@ function Feeding() {
         student_id: selectedStudent.id,
         amount_received: amount,
         payment_date: paymentDate,
+        payment_method: paymentMethod,
+        payment_reference: paymentReference,
         idempotency_key: paymentKey,
       });
       setPaymentKey(newIdempotencyKey());
       setReceipt(response.data);
       setAmount('');
+      setPaymentReference('');
       setNotice(`Payment saved. ${response.data.days_covered} feeding day(s) covered; credit remaining ${money(response.data.credit_added)}.`);
       if (canPaymentRead) await refreshPayments();
       if (canSearch) {
@@ -215,10 +229,11 @@ function Feeding() {
         purchase_date: purchaseForm.purchase_date,
         supplier: purchaseForm.supplier,
         reference: purchaseForm.reference,
+        advance_id: purchaseForm.advance_id || null,
         idempotency_key: purchaseKey,
         items: [{ stock_item_id: purchaseForm.stock_item_id, quantity: purchaseForm.quantity, unit_cost: purchaseForm.unit_cost }],
       });
-      setPurchaseForm((current) => ({ ...current, supplier: '', reference: '', unit_cost: '' }));
+      setPurchaseForm((current) => ({ ...current, supplier: '', reference: '', unit_cost: '', advance_id: '' }));
       setPurchaseKey(newIdempotencyKey());
       const response = await getKitchenPurchases();
       setFeedingPurchases(response.data);
@@ -240,6 +255,43 @@ function Feeding() {
       setNotice(`Feeding purchase ${purchase.id} approved and posted to finance.`);
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to approve feeding purchase.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const issueAdvance = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await createShoppingAdvance({
+        ...advanceForm,
+        idempotency_key: advanceKey,
+      });
+      setAdvanceKey(newIdempotencyKey());
+      setAdvanceForm((current) => ({ ...current, amount_issued: '', recipient_name: '', purpose: '', notes: '' }));
+      const response = await getShoppingAdvances();
+      setAdvances(response.data);
+      setNotice('Shopping advance recorded. It is not posted as an expense until approved purchases are reconciled.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to record shopping advance.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const returnAdvance = async (advance) => {
+    setBusy(true);
+    setError('');
+    try {
+      await reconcileShoppingAdvance(advance.id, advanceReturns[advance.id] ?? advance.returned_amount);
+      const response = await getShoppingAdvances();
+      setAdvances(response.data);
+      setNotice(`Advance #${advance.id} reconciliation saved.`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to reconcile shopping advance.');
     } finally {
       setBusy(false);
     }
@@ -329,6 +381,11 @@ function Feeding() {
                 <input id="feeding-payment-amount" type="number" min="0.01" step="0.01" required value={amount} onChange={(event) => setAmount(event.target.value)} />
                 <label htmlFor="feeding-payment-date">Payment date</label>
                 <input id="feeding-payment-date" type="date" required value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
+                <label htmlFor="feeding-payment-method">Payment method</label>
+                <select id="feeding-payment-method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                  <option value="cash">Cash</option><option value="mobile_money">Mobile Money</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option>
+                </select>
+                {paymentMethod !== 'cash' && <label htmlFor="feeding-payment-reference">Payment reference (optional)<input id="feeding-payment-reference" value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} /></label>}
                 {selectedStudent && (
                   <div className="feeding-coverage-preview">
                     <strong>Automatic coverage estimate</strong>
@@ -351,12 +408,12 @@ function Feeding() {
           <section className="data-panel">
             <div className="panel-heading"><div><p className="eyebrow">History</p><h2>Feeding payments</h2></div></div>
             <div className="table-wrap"><table>
-              <thead><tr><th>Payment date</th><th>Student / class</th><th>Received</th><th>Rate</th><th>Days</th><th>Coverage</th><th>Credit</th><th>Received by</th><th>Receipt</th></tr></thead>
+              <thead><tr><th>Payment date</th><th>Student / class</th><th>Received</th><th>Method / reference</th><th>Rate</th><th>Days</th><th>Coverage</th><th>Credit</th><th>Received by</th><th>Receipt</th></tr></thead>
               <tbody>{payments.map((payment) => (
                 <tr key={payment.id}>
                   <td>{String(payment.payment_date).slice(0, 10)}</td>
                   <td>{payment.student_name}<br /><small>{payment.class_name}</small></td>
-                  <td>{money(payment.amount_received)}</td><td>{money(payment.daily_rate)}</td>
+                  <td>{money(payment.amount_received)}</td><td>{payment.payment_method?.replace('_', ' ') || 'cash'}{payment.payment_reference && <><br /><small>{payment.payment_reference}</small></>}</td><td>{money(payment.daily_rate)}</td>
                   <td>{payment.days_covered}</td>
                   <td>{payment.coverage_start ? `${String(payment.coverage_start).slice(0, 10)} – ${String(payment.coverage_end).slice(0, 10)}` : 'Credit only'}</td>
                   <td>{money(payment.credit_added)}</td><td>{payment.received_by_name || '—'}</td>
@@ -397,6 +454,7 @@ function Feeding() {
                 <label>Unit cost (GH₵)<input type="number" min="0" step="0.01" required value={purchaseForm.unit_cost} onChange={(event) => setPurchaseForm({ ...purchaseForm, unit_cost: event.target.value })} /></label>
                 <label>Supplier<input value={purchaseForm.supplier} onChange={(event) => setPurchaseForm({ ...purchaseForm, supplier: event.target.value })} /></label>
                 <label>Invoice/reference<input value={purchaseForm.reference} onChange={(event) => setPurchaseForm({ ...purchaseForm, reference: event.target.value })} /></label>
+                {canAdvanceManage && <label>Shopping advance (optional)<select value={purchaseForm.advance_id} onChange={(event) => setPurchaseForm({ ...purchaseForm, advance_id: event.target.value })}><option value="">No advance</option>{advances.map((advance) => <option key={advance.id} value={advance.id}>#{advance.id} {advance.recipient_name} — {money(advance.unaccounted_amount)} available</option>)}</select></label>}
                 <button className="btn-primary" disabled={busy || !kitchenStock.length}>Record for approval</button>
               </form>
             )}
@@ -409,6 +467,37 @@ function Feeding() {
                 </tr>
               ))}</tbody>
             </table></div>
+          </section>
+        )}
+
+        {canAdvanceManage && (
+          <section className="data-panel">
+            <div className="panel-heading"><div><p className="eyebrow">Market cash control</p><h2>Shopping advances</h2></div></div>
+            <form className="feeding-calendar-form" onSubmit={issueAdvance}>
+              <label>Amount issued (GH₵)<input type="number" min="0.01" step="0.01" required value={advanceForm.amount_issued} onChange={(event) => setAdvanceForm({ ...advanceForm, amount_issued: event.target.value })} /></label>
+              <label>Recipient<input required value={advanceForm.recipient_name} onChange={(event) => setAdvanceForm({ ...advanceForm, recipient_name: event.target.value })} /></label>
+              <label>Issue date<input type="date" required value={advanceForm.issued_date} onChange={(event) => setAdvanceForm({ ...advanceForm, issued_date: event.target.value })} /></label>
+              <label>Purpose<input required value={advanceForm.purpose} onChange={(event) => setAdvanceForm({ ...advanceForm, purpose: event.target.value })} /></label>
+              <label>Notes<input value={advanceForm.notes} onChange={(event) => setAdvanceForm({ ...advanceForm, notes: event.target.value })} /></label>
+              <button className="btn-primary" disabled={busy}>Issue shopping advance</button>
+            </form>
+            <div className="table-wrap"><table>
+              <thead><tr><th>Date</th><th>Recipient / purpose</th><th>Issued</th><th>Approved purchases</th><th>Returned</th><th>Unaccounted</th><th>Status</th><th>Reconcile</th></tr></thead>
+              <tbody>{advances.map((advance) => <tr key={advance.id}>
+                <td>{String(advance.issued_date).slice(0, 10)}</td>
+                <td>{advance.recipient_name}<br /><small>{advance.purpose}</small></td>
+                <td>{money(advance.amount_issued)}</td>
+                <td>{money(advance.approved_expenses)}</td>
+                <td>{money(advance.returned_amount)}</td>
+                <td>{money(advance.unaccounted_amount)}</td>
+                <td>{advance.status.replace('_', ' ')}</td>
+                <td><div className="feeding-calendar-form">
+                  <input aria-label={`Returned amount for advance ${advance.id}`} type="number" min="0" max={advance.amount_issued} step="0.01" value={advanceReturns[advance.id] ?? advance.returned_amount} onChange={(event) => setAdvanceReturns({ ...advanceReturns, [advance.id]: event.target.value })} />
+                  <button className="btn-secondary" disabled={busy || advance.status === 'awaiting_approval'} onClick={() => returnAdvance(advance)}>Save</button>
+                </div></td>
+              </tr>)}</tbody>
+            </table></div>
+            {!advances.length && <p className="empty-state">No shopping advances recorded.</p>}
           </section>
         )}
 
@@ -444,8 +533,34 @@ function Feeding() {
             {report && <div className="module-stats">
               {report.feeding && <div className="mini-stat"><span>Feeding payments ({report.feeding.count})</span><strong>{money(report.feeding.total)}</strong></div>}
               {report.tuckshop && <div className="mini-stat"><span>Tuckshop sales ({report.tuckshop.count})</span><strong>{money(report.tuckshop.total)}</strong></div>}
+              {report.tuckshop && <div className="mini-stat"><span>Cost of goods sold ({report.tuckshop.costedSalesCount} costed sales)</span><strong>{money(report.tuckshop.costOfGoodsSold)}</strong></div>}
+              {report.tuckshop && <div className="mini-stat"><span>Gross profit on costed sales</span><strong>{money(report.tuckshop.grossProfit)}</strong></div>}
               {report.approvedPurchases?.map((purchase) => <div className="mini-stat" key={purchase.purpose}><span>{purchase.purpose} purchases ({purchase.count})</span><strong>{money(purchase.total)}</strong></div>)}
             </div>}
+            {report?.feedingCollections && (
+              <>
+                <h3>Daily collections</h3>
+                <div className="table-wrap"><table>
+                  <thead><tr><th>Date</th><th>Payments</th><th>Students</th><th>Feeding days issued</th><th>Collected</th></tr></thead>
+                  <tbody>{report.feedingCollections.byDate.map((row) => <tr key={row.collection_date}><td>{row.collection_date}</td><td>{row.payment_count}</td><td>{row.student_count}</td><td>{row.feeding_days}</td><td>{money(row.total)}</td></tr>)}</tbody>
+                </table></div>
+                <div className="split-layout">
+                  <div><h3>Collections by class</h3><div className="table-wrap"><table><thead><tr><th>Class</th><th>Students</th><th>Payments</th><th>Total</th></tr></thead><tbody>{report.feedingCollections.byClass.map((row) => <tr key={row.class_name || 'unassigned'}><td>{row.class_name || 'Unassigned'}</td><td>{row.student_count}</td><td>{row.payment_count}</td><td>{money(row.total)}</td></tr>)}</tbody></table></div></div>
+                  <div><h3>Collections by method</h3><div className="table-wrap"><table><thead><tr><th>Method</th><th>Payments</th><th>Total</th></tr></thead><tbody>{report.feedingCollections.byPaymentMethod.map((row) => <tr key={row.payment_method}><td>{row.payment_method.replace('_', ' ')}</td><td>{row.payment_count}</td><td>{money(row.total)}</td></tr>)}</tbody></table></div></div>
+                </div>
+                <h3>Collections by staff member</h3>
+                <div className="table-wrap"><table><thead><tr><th>Staff member</th><th>Payments</th><th>Total</th></tr></thead><tbody>{report.feedingCollections.byStaff.map((row) => <tr key={row.staff_name}><td>{row.staff_name}</td><td>{row.payment_count}</td><td>{money(row.total)}</td></tr>)}</tbody></table></div>
+              </>
+            )}
+            {report?.tuckshopCollections && (
+              <>
+                <h3>Tuckshop daily sales by payment method</h3>
+                <div className="table-wrap"><table>
+                  <thead><tr><th>Date</th><th>Transactions</th><th>Cash</th><th>Mobile money</th><th>Other</th><th>Total</th></tr></thead>
+                  <tbody>{report.tuckshopCollections.map((row) => <tr key={row.sale_date}><td>{String(row.sale_date).slice(0, 10)}</td><td>{row.transaction_count}</td><td>{money(row.cash_total)}</td><td>{money(row.mobile_money_total)}</td><td>{money(row.other_total)}</td><td>{money(row.total)}</td></tr>)}</tbody>
+                </table></div>
+              </>
+            )}
           </section>
         )}
       </div>
@@ -459,6 +574,8 @@ function Feeding() {
             <p><strong>Class:</strong> {receipt.class_name || '—'}</p>
             <p><strong>Amount received:</strong> {money(receipt.amount_received)}</p>
             <p><strong>Daily rate:</strong> {money(receipt.daily_rate)}</p>
+            <p><strong>Payment method:</strong> {receipt.payment_method?.replace('_', ' ') || 'cash'}</p>
+            {receipt.payment_reference && <p><strong>Payment reference:</strong> {receipt.payment_reference}</p>}
             <p><strong>Feeding days covered:</strong> {receipt.days_covered}</p>
             <p><strong>Coverage:</strong> {receipt.coverage_start ? `${String(receipt.coverage_start).slice(0, 10)} – ${String(receipt.coverage_end).slice(0, 10)}` : 'Credit only'}</p>
             <p><strong>Credit:</strong> {money(receipt.credit_added)}</p>

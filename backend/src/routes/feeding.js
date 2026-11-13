@@ -4,8 +4,11 @@ const authorizePermission = require('../middleware/authorizePermission');
 const authorizeAnyPermission = require('../middleware/authorizeAnyPermission');
 const {
   approveKitchenPurchase,
+  approveTuckshopProductPurchase,
   createCalendarEvent,
   createKitchenPurchase,
+  createShoppingAdvance,
+  createTuckshopProductPurchase,
   createTuckshopSale,
   deleteCalendarEvent,
   getFeedingClasses,
@@ -13,12 +16,17 @@ const {
   getFeedingReceipt,
   getFeedingRegister,
   getFeedingReport,
+  getShoppingAdvances,
   getCalendarEvents,
   getKitchenPurchases,
   getKitchenStock,
   getTuckshopProducts,
+  getTuckshopProductPurchases,
   getTuckshopSales,
+  getTuckshopDailyReconciliation,
   recordFeedingPayment,
+  reconcileShoppingAdvance,
+  saveTuckshopDailyReconciliation,
   saveKitchenStock,
   saveTuckshopProduct,
   searchFeedingStudents,
@@ -48,12 +56,23 @@ router.get('/payments/:id/receipt', authorizePermission('feeding.payments.read')
 router.get('/register', authorizeAnyPermission('feeding.register.read', 'feeding.register.manage'), getFeedingRegister);
 router.put('/register/:id', authorizePermission('feeding.register.manage'), updateFeedingRegister);
 router.get('/reports', authorizeAnyPermission('feeding.reports.read', 'tuckshop.reports.read'), getFeedingReport);
+router.get('/advances', authorizePermission('feeding.advances.manage'), getShoppingAdvances);
+router.post('/advances', authorizePermission('feeding.advances.manage'), createShoppingAdvance);
+router.put('/advances/:id/reconcile', authorizePermission('feeding.advances.manage'), reconcileShoppingAdvance);
 
-router.get('/tuckshop/products', authorizeAnyPermission('tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.create'), getTuckshopProducts);
+router.get('/tuckshop/products', authorizeAnyPermission(
+  'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.create',
+  'tuckshop.purchases.create', 'tuckshop.purchases.approve'
+), getTuckshopProducts);
 router.post('/tuckshop/products', authorizePermission('tuckshop.products.manage'), saveTuckshopProduct);
 router.put('/tuckshop/products/:id', authorizePermission('tuckshop.products.manage'), saveTuckshopProduct);
 router.get('/tuckshop/sales', authorizePermission('tuckshop.sales.read'), getTuckshopSales);
 router.post('/tuckshop/sales', authorizePermission('tuckshop.sales.create'), createTuckshopSale);
+router.get('/tuckshop/purchases', authorizeAnyPermission('tuckshop.purchases.read', 'tuckshop.purchases.create', 'tuckshop.purchases.approve'), getTuckshopProductPurchases);
+router.post('/tuckshop/purchases', authorizePermission('tuckshop.purchases.create'), createTuckshopProductPurchase);
+router.post('/tuckshop/purchases/:id/approve', authorizePermission('tuckshop.purchases.approve'), approveTuckshopProductPurchase);
+router.get('/tuckshop/reconciliation', authorizePermission('tuckshop.sales.reconcile'), getTuckshopDailyReconciliation);
+router.put('/tuckshop/reconciliation', authorizePermission('tuckshop.sales.reconcile'), saveTuckshopDailyReconciliation);
 router.get('/kitchen/stock', authorizeAnyPermission('feeding.purchases.create', 'feeding.purchases.approve', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.approve'), getKitchenStock);
 router.post('/kitchen/stock', authorizePermission('tuckshop.stock.manage'), saveKitchenStock);
 router.put('/kitchen/stock/:id', authorizePermission('tuckshop.stock.manage'), saveKitchenStock);

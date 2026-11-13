@@ -49,9 +49,9 @@ const StaffRoute = ({ children }) => {
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
   if (user?.role === 'student') return <Navigate to="/student" replace />;
   const operationalPageAllowed = pathname === '/feeding'
-    ? hasOperationalPermission(user, 'feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.reports.read')
+    ? hasOperationalPermission(user, 'feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read')
     : pathname === '/tuckshop'
-      ? hasOperationalPermission(user, 'tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.reports.read')
+      ? hasOperationalPermission(user, 'tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read')
       : false;
   if (user?.role === 'feeding_tuckshop_officer'
       && pathname !== '/'
@@ -98,8 +98,8 @@ const RoleBasedDashboard = () => {
   if (role === 'inventory' || role === 'store' || role === 'storekeeper') return <Inventory />;
   if (role === 'librarian') return <Library />;
   if (role === 'feeding_tuckshop_officer') {
-    if (hasOperationalPermission(user, 'feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.reports.read')) return <Navigate to="/feeding" replace />;
-    if (hasOperationalPermission(user, 'tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.reports.read')) return <Navigate to="/tuckshop" replace />;
+    if (hasOperationalPermission(user, 'feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read')) return <Navigate to="/feeding" replace />;
+    if (hasOperationalPermission(user, 'tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read')) return <Navigate to="/tuckshop" replace />;
     return <div className="page"><p>No feeding or tuckshop permissions are assigned to your account. Contact an administrator.</p></div>;
   }
   return <Dashboard />;
@@ -141,8 +141,8 @@ function App() {
         <Route path="inventory" element={<AllowedRoles roles={['admin', 'inventory', 'store', 'storekeeper', 'teacher']}><Inventory /></AllowedRoles>} />
         <Route path="employees" element={<Employees />} />
         <Route path="payroll" element={<AllowedRoles roles={['admin', 'accountant']}><Payroll /></AllowedRoles>} />
-        <Route path="feeding" element={<AllowedOperationalPermissions permissions={['feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.reports.read']}><Feeding /></AllowedOperationalPermissions>} />
-        <Route path="tuckshop" element={<AllowedOperationalPermissions permissions={['tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.reports.read']}><Tuckshop /></AllowedOperationalPermissions>} />
+        <Route path="feeding" element={<AllowedOperationalPermissions permissions={['feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read']}><Feeding /></AllowedOperationalPermissions>} />
+        <Route path="tuckshop" element={<AllowedOperationalPermissions permissions={['tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read']}><Tuckshop /></AllowedOperationalPermissions>} />
         <Route path="library" element={<Library />} />
         <Route path="ai" element={<McCarthyAI />} />
         <Route path="announcements" element={<Announcements />} />

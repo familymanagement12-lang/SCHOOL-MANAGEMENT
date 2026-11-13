@@ -12,10 +12,18 @@ export const getFeedingReceipt = (id) => api.get(`/feeding/payments/${id}/receip
 export const getFeedingRegister = (date) => api.get('/feeding/register', { params: { date } });
 export const updateFeedingRegister = (id, is_served) => api.put(`/feeding/register/${id}`, { is_served });
 export const getFeedingReport = (startDate, endDate) => api.get('/feeding/reports', { params: { startDate, endDate } });
+export const getShoppingAdvances = () => api.get('/feeding/advances');
+export const createShoppingAdvance = (data) => api.post('/feeding/advances', data);
+export const reconcileShoppingAdvance = (id, returned_amount) => api.put(`/feeding/advances/${id}/reconcile`, { returned_amount });
 export const getTuckshopProducts = () => api.get('/feeding/tuckshop/products');
 export const saveTuckshopProduct = (data, id) => id ? api.put(`/feeding/tuckshop/products/${id}`, data) : api.post('/feeding/tuckshop/products', data);
 export const getTuckshopSales = () => api.get('/feeding/tuckshop/sales');
 export const createTuckshopSale = (data) => api.post('/feeding/tuckshop/sales', data);
+export const getTuckshopProductPurchases = () => api.get('/feeding/tuckshop/purchases');
+export const createTuckshopProductPurchase = (data) => api.post('/feeding/tuckshop/purchases', data);
+export const approveTuckshopProductPurchase = (id) => api.post(`/feeding/tuckshop/purchases/${id}/approve`);
+export const getTuckshopDailyReconciliation = (date) => api.get('/feeding/tuckshop/reconciliation', { params: { date } });
+export const saveTuckshopDailyReconciliation = (data) => api.put('/feeding/tuckshop/reconciliation', data);
 export const getKitchenStock = () => api.get('/feeding/kitchen/stock');
 export const saveKitchenStock = (data, id) => id ? api.put(`/feeding/kitchen/stock/${id}`, data) : api.post('/feeding/kitchen/stock', data);
 export const getKitchenPurchases = () => api.get('/feeding/kitchen/purchases');

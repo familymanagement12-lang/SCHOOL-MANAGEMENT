@@ -35,8 +35,8 @@ const sections = [
       { path: '/payroll', label: 'Payroll', icon: Activity, roles: ['admin', 'accountant'] },
       { path: '/users', label: 'Teachers & roles', icon: Users, roles: ['admin', 'teacher'] },
       { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
-      { path: '/feeding', label: 'Feeding', icon: UtensilsCrossed, permissions: ['feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.reports.read'] },
-      { path: '/tuckshop', label: 'Tuckshop', icon: ShoppingBag, permissions: ['tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.create', 'tuckshop.sales.read', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.reports.read'] },
+      { path: '/feeding', label: 'Feeding', icon: UtensilsCrossed, permissions: ['feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read'] },
+      { path: '/tuckshop', label: 'Tuckshop', icon: ShoppingBag, permissions: ['tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.create', 'tuckshop.sales.read', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read'] },
     ],
   },
 ];

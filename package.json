@@ -14,6 +14,7 @@
     "db:migrate:optional-class-teacher": "node scripts/migrate_optional_class_teacher.js",
     "db:migrate:school-store": "node scripts/migrate_school_store.js",
     "db:migrate:feeding-tuckshop": "node scripts/migrate_feeding_tuckshop.js",
+    "db:migrate:feeding-market-reconciliation": "node scripts/migrate_feeding_market_reconciliation.js",
     "db:migrate:fee-overrides-staff-attendance": "node scripts/migrate_fee_overrides_staff_attendance.js",
     "db:migrate:ai-assistant": "node scripts/migrate_ai_assistant.js",
     "db:migrate:accountant-rls": "node scripts/migrate_accountant_rls_audit.js",
