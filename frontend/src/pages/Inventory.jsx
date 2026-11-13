@@ -156,7 +156,7 @@ function Inventory() {
   useEffect(() => { refresh(); }, []);
 
   useEffect(() => {
-    if (recipientSearch.trim().length < 2 || !canManage) {
+    if (recipientSearch.trim().length < 2 || !canManage || issueForm.recipient_id) {
       setRecipients([]);
       return undefined;
     }
@@ -167,7 +167,7 @@ function Inventory() {
         .catch((requestError) => { if (active) setError(errorMessage(requestError, 'Could not search recipients.')); });
     }, 250);
     return () => { active = false; clearTimeout(timer); };
-  }, [recipientSearch, canManage]);
+  }, [recipientSearch, canManage, issueForm.recipient_id]);
 
   useEffect(() => {
     if (!printLabel) return undefined;
@@ -483,6 +483,11 @@ function Inventory() {
         .inventory-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
         .inventory-form-grid label{display:flex;flex-direction:column;gap:.35rem;font-weight:600;color:#334155}
         .inventory-form-grid input,.inventory-form-grid select,.inventory-form-grid textarea{width:100%;min-height:42px}
+        .inventory-recipient-picker{position:relative;display:flex;flex-direction:column;gap:.35rem;font-weight:600;color:#334155}
+        .inventory-recipient-results{position:absolute;z-index:5;top:100%;left:0;right:0;display:grid;max-height:220px;overflow:auto;padding:.25rem;background:#fff;border:1px solid #cbd5e1;border-radius:.4rem;box-shadow:0 8px 20px rgba(15,23,42,.12)}
+        .inventory-recipient-results button,.inventory-recipient-results span{padding:.65rem .75rem;text-align:left;background:#fff;border:0;border-radius:.25rem;color:#1e293b}
+        .inventory-recipient-results button{cursor:pointer}
+        .inventory-recipient-results button:hover,.inventory-recipient-results button:focus{background:#f1f5f9}
         .inventory-actions{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
         .inventory-alert{border-left:4px solid #f59e0b;padding:.75rem 1rem;background:#fffbeb;border-radius:.5rem;margin:.5rem 0}
         .inventory-print-label{display:inline-flex;flex-direction:column;align-items:center;gap:.2rem;padding:1rem;border:1px dashed #94a3b8;min-width:260px;background:#fff;color:#0f172a}
@@ -704,7 +709,41 @@ function Inventory() {
               <label>Recipient type *<select value={issueForm.recipient_type} onChange={(event) => { setIssueForm({ ...issueForm, recipient_type: event.target.value, recipient_id: '', recipient_name: '', department: '' }); setRecipients([]); setRecipientSearch(''); }}><option value="student">Student</option><option value="teacher">Teacher</option><option value="employee">Non-teaching staff</option><option value="department">Department</option></select></label>
               {issueForm.recipient_type === 'department'
                 ? <label>Department *<input required value={issueForm.department} onChange={(event) => setIssueForm({ ...issueForm, department: event.target.value })} placeholder="e.g. Science Department" /></label>
-                : <label>Search recipient *<input value={recipientSearch} onChange={(event) => { setRecipientSearch(event.target.value); setIssueForm({ ...issueForm, recipient_id: '', recipient_name: '' }); }} placeholder="Name or student / staff ID" /><select value={issueForm.recipient_id} required onChange={(event) => { const selected = recipients.find((entry) => String(entry.id) === event.target.value); setIssueForm({ ...issueForm, recipient_id: event.target.value, recipient_name: selected?.name || '' }); }}><option value="">Select search result</option>{recipients.filter((entry) => entry.type === issueForm.recipient_type).map((entry) => <option key={`${entry.type}-${entry.id}`} value={entry.id}>{entry.name} · ID {entry.identifier}</option>)}</select></label>}
+                : <div className="inventory-recipient-picker">
+                  <label htmlFor="inventory-recipient-search">{issueForm.recipient_id ? 'Recipient *' : 'Search recipient *'}</label>
+                  <input
+                    id="inventory-recipient-search"
+                    required
+                    value={recipientSearch}
+                    onChange={(event) => {
+                      setRecipientSearch(event.target.value);
+                      setIssueForm({ ...issueForm, recipient_id: '', recipient_name: '' });
+                    }}
+                    placeholder="Type a name or ID"
+                    autoComplete="off"
+                  />
+                  {!issueForm.recipient_id && recipientSearch.trim().length >= 2 && (
+                    <div className="inventory-recipient-results" role="listbox" aria-label="Matching recipients">
+                      {recipients.filter((entry) => entry.type === issueForm.recipient_type).map((entry) => (
+                        <button
+                          key={`${entry.type}-${entry.id}`}
+                          type="button"
+                          role="option"
+                          aria-label={`${entry.name}, ${entry.type}, ID ${entry.identifier}`}
+                          onClick={() => {
+                            setIssueForm({ ...issueForm, recipient_id: String(entry.id), recipient_name: entry.name });
+                            setRecipientSearch(entry.name);
+                            setRecipients([]);
+                          }}
+                        >
+                          {entry.name}
+                        </button>
+                      ))}
+                      {!recipients.some((entry) => entry.type === issueForm.recipient_type) && <span>No matching names found.</span>}
+                    </div>
+                  )}
+                  {issueForm.recipient_id && <small>Selected: {issueForm.recipient_name}</small>}
+                </div>}
               <label>Quantity *<input required type="number" min="1" step="1" value={issueForm.quantity} onChange={(event) => setIssueForm({ ...issueForm, quantity: event.target.value })} /></label>
               <label>Purpose / reference *<input required maxLength="500" value={issueForm.purpose} onChange={(event) => setIssueForm({ ...issueForm, purpose: event.target.value })} placeholder="Class activity, term supplies..." /></label>
             </div>
