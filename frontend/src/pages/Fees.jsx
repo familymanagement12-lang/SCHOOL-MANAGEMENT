@@ -398,9 +398,9 @@ function Fees() {
                 ))}
               </div>
 
-              <div style={{ background: '#ecfdf5', padding: '1.25rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', border: '1px solid #10b981' }}>
-                <span style={{ fontWeight: 'bold', color: '#065f46', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Amount:</span>
-                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#059669' }}>
+              <div style={{ background: '#eff8fd', padding: '1.25rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', border: '1px solid #078fc4' }}>
+                <span style={{ fontWeight: 'bold', color: '#075e9a', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Amount:</span>
+                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#075e9a' }}>
                   {formatMoney(structureData.items.reduce((sum, item) => sum + Number(item.amount || 0), 0))}
                 </span>
               </div>

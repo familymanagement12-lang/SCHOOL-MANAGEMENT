@@ -137,8 +137,8 @@ function Employees() {
 
         <section className="module-stats">
           <div className="mini-stat"><span>Total Staff</span><strong style={{ color: '#3b82f6' }}>{stats.total}</strong></div>
-          <div className="mini-stat"><span>Active Payroll</span><strong style={{ color: '#10b981' }}>{stats.active}</strong></div>
-          <div className="mini-stat"><span>Est. Monthly Cost</span><strong style={{ color: '#8b5cf6' }}>{formatMoney(stats.monthlyCost)}</strong></div>
+          <div className="mini-stat"><span>Active Payroll</span><strong style={{ color: '#078fc4' }}>{stats.active}</strong></div>
+          <div className="mini-stat"><span>Est. Monthly Cost</span><strong style={{ color: '#075e9a' }}>{formatMoney(stats.monthlyCost)}</strong></div>
         </section>
 
         <section className="split-layout">
@@ -200,7 +200,7 @@ function Employees() {
                   {employees.map(emp => (
                     <tr key={emp.id} style={{ opacity: emp.is_active ? 1 : 0.6 }}>
                       <td><strong>{emp.full_name}</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>{emp.role}</div></td>
-                      <td><strong style={{ color: '#059669' }}>{formatMoney(Number(emp.basic_salary) + Number(emp.allowance) - Number(emp.deductions))}</strong></td>
+                      <td><strong style={{ color: '#075e9a' }}>{formatMoney(Number(emp.basic_salary) + Number(emp.allowance) - Number(emp.deductions))}</strong></td>
                       <td><span style={{ fontSize: '0.85rem' }}>{emp.bank_name || '-'}<br/>{emp.bank_account || ''}</span></td>
                       <td><span className={`status-pill ${emp.is_active ? 'present' : 'absent'}`}>{emp.is_active ? 'Active' : 'Inactive'}</span></td>
                       <td>

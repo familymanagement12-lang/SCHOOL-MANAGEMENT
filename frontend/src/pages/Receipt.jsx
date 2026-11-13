@@ -130,8 +130,8 @@ function Receipt() {
           <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><strong style={{ color: '#64748b' }}>Description:</strong> <span>{fee.description || 'School Fees'}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #cbd5e1' }}><strong style={{ color: '#64748b' }}>Amount Due:</strong> <span>{formatMoney(fee.amount_due)}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', background: '#ecfdf5', padding: '1rem', borderRadius: '8px', border: '1px solid #a7f3d0' }}><strong style={{ color: '#065f46' }}>Amount Paid:</strong> <span style={{ fontWeight: 'bold', color: '#059669', fontSize: '1.25rem' }}>{formatMoney(fee.amount_paid)}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.5rem' }}><strong style={{ color: '#64748b' }}>Outstanding Balance:</strong> <span style={{ fontWeight: 'bold', color: Number(fee.balance) > 0 ? '#ef4444' : '#10b981' }}>{formatMoney(fee.balance)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', background: '#eff8fd', padding: '1rem', borderRadius: '8px', border: '1px solid #b7dff1' }}><strong style={{ color: '#075e9a' }}>Amount Paid:</strong> <span style={{ fontWeight: 'bold', color: '#075e9a', fontSize: '1.25rem' }}>{formatMoney(fee.amount_paid)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.5rem' }}><strong style={{ color: '#64748b' }}>Outstanding Balance:</strong> <span style={{ fontWeight: 'bold', color: Number(fee.balance) > 0 ? '#ef4444' : '#075e9a' }}>{formatMoney(fee.balance)}</span></div>
           </div>
         </div>
 

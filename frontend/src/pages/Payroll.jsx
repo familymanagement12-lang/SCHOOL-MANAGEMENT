@@ -97,13 +97,13 @@ function Payroll() {
               {MONTHS.map((m, idx) => <option key={idx} value={idx + 1}>{m}</option>)}
             </select>
             <input type="number" value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} style={{ padding: '0.75rem', borderRadius: '8px', border: 'none', fontWeight: 'bold', width: '90px' }} />
-            <button onClick={handleGenerate} disabled={isGenerating} className="btn-primary" style={{ background: '#10b981', marginLeft: '0.5rem' }}>{isGenerating ? 'Generating...' : '⚡ Generate Run'}</button>
+            <button onClick={handleGenerate} disabled={isGenerating} className="btn-primary" style={{ marginLeft: '0.5rem' }}>{isGenerating ? 'Generating...' : '⚡ Generate Run'}</button>
           </div>
         </section>
 
         <section className="module-stats">
           <div className="mini-stat"><span>Total Payroll ({MONTHS[selectedMonth-1]})</span><strong style={{ color: '#0f172a' }}>{formatMoney(stats.total)}</strong></div>
-          <div className="mini-stat"><span>Total Paid</span><strong style={{ color: '#10b981' }}>{formatMoney(stats.paid)}</strong></div>
+          <div className="mini-stat"><span>Total Paid</span><strong style={{ color: '#075e9a' }}>{formatMoney(stats.paid)}</strong></div>
           <div className="mini-stat"><span>Pending Clearance</span><strong style={{ color: stats.pending > 0 ? '#ef4444' : '#64748b' }}>{formatMoney(stats.pending)}</strong></div>
           <div className="mini-stat"><span>Staff Included</span><strong style={{ color: '#3b82f6' }}>{payroll.length}</strong></div>
         </section>
@@ -133,7 +133,7 @@ function Payroll() {
                           <button className="btn-small" style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', padding: '0.15rem 0.4rem', fontSize: '0.7rem', marginTop: '0.3rem' }} onClick={() => setDeductionModal(p)}>+ Add Deduction</button>
                         )}
                       </td>
-                      <td><strong style={{ color: '#059669' }}>{formatMoney(p.net_salary)}</strong></td>
+                      <td><strong style={{ color: '#075e9a' }}>{formatMoney(p.net_salary)}</strong></td>
                       <td style={{ fontSize: '0.85rem', color: '#475569' }}>{p.bank_name}<br/>{p.bank_account}</td>
                       <td><span className={`status-pill ${p.status === 'paid' ? 'present' : 'absent'}`}>{p.status.toUpperCase()}</span></td>
                       <td>

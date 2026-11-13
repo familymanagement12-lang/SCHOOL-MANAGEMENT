@@ -105,9 +105,9 @@ function Transactions() {
         </section>
 
         <section className="module-stats">
-          <div className="mini-stat"><span>Total Income</span><strong style={{ color: '#10b981' }}>{formatMoney(totals.income)}</strong></div>
+          <div className="mini-stat"><span>Total Income</span><strong style={{ color: '#075e9a' }}>{formatMoney(totals.income)}</strong></div>
           <div className="mini-stat"><span>Total Expenditure</span><strong style={{ color: '#ef4444' }}>{formatMoney(totals.expenditure)}</strong></div>
-          <div className="mini-stat"><span>Net Balance</span><strong style={{ color: totals.balance >= 0 ? '#10b981' : '#ef4444' }}>{formatMoney(totals.balance)}</strong></div>
+          <div className="mini-stat"><span>Net Balance</span><strong style={{ color: totals.balance >= 0 ? '#075e9a' : '#ef4444' }}>{formatMoney(totals.balance)}</strong></div>
         </section>
 
         <section className="split-layout">
@@ -123,7 +123,7 @@ function Transactions() {
               <button 
                 type="button" 
                 onClick={() => setFormData({ ...formData, type: 'income' })}
-                style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', background: formData.type === 'income' ? '#10b981' : 'transparent', color: formData.type === 'income' ? 'white' : '#64748b', boxShadow: formData.type === 'income' ? '0 2px 8px rgba(16, 185, 129, 0.4)' : 'none' }}
+                style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', background: formData.type === 'income' ? '#075e9a' : 'transparent', color: formData.type === 'income' ? 'white' : '#64748b', boxShadow: formData.type === 'income' ? '0 2px 8px rgba(7, 94, 154, 0.3)' : 'none' }}
               >
                 ⬇️ Income
               </button>
@@ -151,7 +151,7 @@ function Transactions() {
             <label>Reference No. / Receipt ID</label>
             <input type="text" value={formData.reference} onChange={(e) => setFormData({...formData, reference: e.target.value})} />
             
-            <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', background: formData.type === 'income' ? '#10b981' : '#ef4444' }}>Record {formData.type === 'income' ? 'Income' : 'Expense'}</button>
+            <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', background: formData.type === 'income' ? '#075e9a' : '#ef4444' }}>Record {formData.type === 'income' ? 'Income' : 'Expense'}</button>
           </form>
 
           <section className="data-panel">
@@ -160,9 +160,9 @@ function Transactions() {
               <button 
                 type="button" 
                 onClick={() => setReportModal(true)} 
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '0.75rem 1.25rem', borderRadius: '8px', border: 'none', fontWeight: 'bold', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)', cursor: 'pointer', transition: 'all 0.2s ease' }}
-                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 12px -2px rgba(16, 185, 129, 0.3)'; }} 
-                onMouseOut={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(16, 185, 129, 0.2)'; }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(135deg, #075e9a 0%, #078fc4 100%)', color: 'white', padding: '0.75rem 1.25rem', borderRadius: '8px', border: 'none', fontWeight: 'bold', boxShadow: '0 4px 6px -1px rgba(7, 94, 154, 0.2)', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 12px -2px rgba(7, 94, 154, 0.3)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(7, 94, 154, 0.2)'; }}
               >
                 📊 Generate Financial Report
               </button>
@@ -175,12 +175,12 @@ function Transactions() {
                     <tr key={t.id}>
                       <td style={{ whiteSpace: 'nowrap' }}>{new Date(t.date).toLocaleDateString()}</td>
                       <td>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.6rem', borderRadius: '99px', fontSize: '0.75rem', fontWeight: 'bold', background: t.type === 'income' ? '#d1fae5' : '#fee2e2', color: t.type === 'income' ? '#065f46' : '#991b1b', textTransform: 'capitalize' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.6rem', borderRadius: '99px', fontSize: '0.75rem', fontWeight: 'bold', background: t.type === 'income' ? '#e5f4fb' : '#fee2e2', color: t.type === 'income' ? '#075e9a' : '#991b1b', textTransform: 'capitalize' }}>
                           {t.type === 'income' ? '⬇️' : '⬆️'} {t.type}
                         </span>
                       </td>
                       <td><strong>{t.category}</strong><div style={{ fontSize: '0.75rem', color: '#64748b' }}>{t.description}</div></td>
-                      <td><strong style={{ color: t.type === 'income' ? '#059669' : '#dc2626' }}>{formatMoney(t.amount)}</strong></td>
+                      <td><strong style={{ color: t.type === 'income' ? '#075e9a' : '#dc2626' }}>{formatMoney(t.amount)}</strong></td>
                       <td style={{ fontSize: '0.85rem' }}>{t.reference || '-'}</td>
                       <td><button className="btn-small btn-delete" onClick={() => handleDelete(t.id)}>Delete</button></td>
                     </tr>
@@ -232,7 +232,7 @@ function Transactions() {
                     <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a', fontSize: '1.15rem' }}>📖 What this means in simple terms:</h3>
                     <p style={{ margin: 0, color: '#475569', lineHeight: '1.6', fontSize: '0.95rem' }}>
                       Between <strong>{new Date(reportDates.startDate).toLocaleDateString()}</strong> and <strong>{new Date(reportDates.endDate).toLocaleDateString()}</strong>, your school collected <strong>{formatMoney(reportData.totalIncome)}</strong> and spent <strong>{formatMoney(reportData.totalExpenditure)}</strong>. 
-                      As a result, the school {reportData.netBalance >= 0 ? <span style={{color: '#059669', fontWeight: 'bold'}}>made a net profit</span> : <span style={{color: '#dc2626', fontWeight: 'bold'}}>took a net loss</span>} of <strong>{formatMoney(Math.abs(reportData.netBalance))}</strong>. 
+                      As a result, the school {reportData.netBalance >= 0 ? <span style={{color: '#075e9a', fontWeight: 'bold'}}>made a net profit</span> : <span style={{color: '#dc2626', fontWeight: 'bold'}}>took a net loss</span>} of <strong>{formatMoney(Math.abs(reportData.netBalance))}</strong>.
                       {topIncome && <> Your biggest source of money was <strong>{topIncome.category}</strong> ({formatMoney(topIncome.amount)}).</>}
                       {topExpense && <> Your biggest expense was <strong>{topExpense.category}</strong> ({formatMoney(topExpense.amount)}).</>}
                     </p>
@@ -242,9 +242,9 @@ function Transactions() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem', marginBottom: '2.5rem', alignItems: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '1.5rem', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
                       <h4 style={{ margin: 0, color: '#334155' }}>Income vs Expenditure</h4>
-                      <div style={{ width: '160px', height: '160px', borderRadius: '50%', background: `conic-gradient(#10b981 ${incomePct}%, #ef4444 0)`, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                      <div style={{ width: '160px', height: '160px', borderRadius: '50%', background: `conic-gradient(#075e9a ${incomePct}%, #ef4444 0)`, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                       <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                        <span style={{ color: '#10b981' }}>■ Income ({Math.round(incomePct)}%)</span>
+                        <span style={{ color: '#075e9a' }}>■ Income ({Math.round(incomePct)}%)</span>
                         <span style={{ color: '#ef4444' }}>■ Expenses ({Math.round(expPct)}%)</span>
                       </div>
                     </div>
@@ -268,14 +268,14 @@ function Transactions() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2.5rem', marginBottom: '2rem' }}>
                     <div>
-                      <h3 style={{ color: '#059669', borderBottom: '2px solid #10b981', paddingBottom: '0.5rem', margin: '0 0 1rem 0' }}>Income</h3>
+                      <h3 style={{ color: '#075e9a', borderBottom: '2px solid #078fc4', paddingBottom: '0.5rem', margin: '0 0 1rem 0' }}>Income</h3>
                       {reportData.income.length === 0 ? <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No income recorded.</p> : (
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
                           <tbody>
                             {reportData.income.map((item, idx) => (
                               <tr key={idx}><td style={{ padding: '0.5rem 0', borderBottom: '1px solid #f1f5f9', color: '#334155' }}>{item.category}</td><td style={{ padding: '0.5rem 0', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: '600', color: '#0f172a' }}>{formatMoney(item.amount)}</td></tr>
                             ))}
-                            <tr><td style={{ padding: '0.75rem 0', fontWeight: '800', color: '#0f172a' }}>Total Income</td><td style={{ padding: '0.75rem 0', textAlign: 'right', fontWeight: '800', color: '#059669' }}>{formatMoney(reportData.totalIncome)}</td></tr>
+                            <tr><td style={{ padding: '0.75rem 0', fontWeight: '800', color: '#0f172a' }}>Total Income</td><td style={{ padding: '0.75rem 0', textAlign: 'right', fontWeight: '800', color: '#075e9a' }}>{formatMoney(reportData.totalIncome)}</td></tr>
                           </tbody>
                         </table>
                       )}
@@ -295,9 +295,9 @@ function Transactions() {
                     </div>
                   </div>
 
-                  <div style={{ background: reportData.netBalance >= 0 ? '#ecfdf5' : '#fef2f2', padding: '1.5rem', borderRadius: '12px', border: `1px solid ${reportData.netBalance >= 0 ? '#a7f3d0' : '#fecaca'}`, textAlign: 'center' }}>
+                  <div style={{ background: reportData.netBalance >= 0 ? '#eff8fd' : '#fef2f2', padding: '1.5rem', borderRadius: '12px', border: `1px solid ${reportData.netBalance >= 0 ? '#b7dff1' : '#fecaca'}`, textAlign: 'center' }}>
                     <p style={{ margin: '0 0 0.25rem 0', color: '#475569', textTransform: 'uppercase', fontWeight: '800', fontSize: '0.85rem', letterSpacing: '0.05em' }}>Net Profit / Loss</p>
-                    <h2 style={{ margin: 0, fontSize: '2.5rem', color: reportData.netBalance >= 0 ? '#059669' : '#dc2626' }}>{formatMoney(reportData.netBalance)}</h2>
+                    <h2 style={{ margin: 0, fontSize: '2.5rem', color: reportData.netBalance >= 0 ? '#075e9a' : '#dc2626' }}>{formatMoney(reportData.netBalance)}</h2>
                   </div>
 
                   <div className="modal-actions no-print" style={{ marginTop: '2rem', borderTop: 'none', paddingTop: 0 }}>
