@@ -26,7 +26,7 @@ const createUser = async (req, res, next) => {
   if (!name || !email || !role) {
     return res.status(400).json({ message: 'Name, email, and role are required.' });
   }
-  if (!['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) {
+  if (!['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant'].includes(role)) {
     return res.status(400).json({ message: 'Invalid user role.' });
   }
 
@@ -148,7 +148,7 @@ const updateUser = async (req, res, next) => {
   const { school_id } = req.user;
   const { id } = req.params;
   const { name, email, role, is_active, subjects } = req.body;
-  if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
+  if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
 
   try {
     const client = await pool.connect();

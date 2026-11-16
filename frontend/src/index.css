@@ -186,7 +186,6 @@ tbody tr:hover { background-color: #f8fafc; }
 
 /* --- Utilities & Feedback --- */
 .error { background: #fef2f2; color: var(--danger); padding: 1rem; border-radius: 8px; border: 1px solid #fecaca; font-size: 0.9rem; font-weight: 500; }
-.success { background: #eff7f0; color: #286447; padding: 1rem; border-radius: 8px; border: 1px solid #d4e6d6; font-size: 0.9rem; font-weight: 500; }
 .empty-state { text-align: center; color: var(--text-muted); padding: 3rem; font-style: italic; }
 .id-pill, .status-pill { background: var(--secondary-hover); padding: 0.35rem 0.75rem; border-radius: 99px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
 .status-pill.present { background: #d1fae5; color: #065f46; }

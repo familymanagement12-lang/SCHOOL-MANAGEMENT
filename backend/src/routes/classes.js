@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.use(authenticate);
 
-router.get('/', authorize(['admin', 'teacher', 'accountant', 'feeding_tuckshop_officer']), getClasses);
+router.get('/', authorize(['admin', 'teacher', 'accountant']), getClasses);
 router.post('/', authorize(['admin', 'teacher']), createClass);
 router.put('/:id', authorize(['admin']), updateClass);
 router.delete('/:id', authorize(['admin']), deleteClass);

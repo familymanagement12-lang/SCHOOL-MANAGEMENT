@@ -31,7 +31,6 @@ In the Render API service, set `CORS_ORIGIN` and `FRONTEND_URL` to the deployed 
 - `npm run db:migrate:school-store` additively upgrades the existing inventory catalogue with suppliers, purchase receipts, stock movements, issuances, assets, requests, stocktakes, audit history, and row-level security.
 - `npm run db:migrate:fee-overrides-staff-attendance` adds individual fee adjustments and the staff attendance register without removing existing fee or employee data.
 - `npm run db:migrate:accountant-rls` adds the accountant finance role support, finance change audit history, and PostgreSQL row-level policies to finance tables.
-- `npm run db:migrate:feeding` applies the additive compulsory-feeding, rate/calendar, account, receipt, allocation, refund, ledger, and audit schema using a direct (unpooled) database connection.
 - `npm run db:migrate:timetable` applies or rechecks the timetable-management migrations independently.
 - `npm run admin:seed` creates the initial administrator; it does not print the password.
 - `npm run dev:backend` starts the API.
@@ -56,15 +55,6 @@ Item and asset barcode labels can be printed. USB barcode scanners that type int
 When applying a fee structure to selected classes, administrators and accountants can set a different total fee for an individual student and must record a reason for each difference. Students without an adjustment receive the normal class total. The adjustment and reason are retained with the fee record and finance audit history.
 
 Administrators can switch the Attendance page to the staff register, mark active employees present, absent, late, or excused for a selected date, and record a required reason for each absence. Staff attendance changes are retained in an audit history and are protected by backend authorization and school-level row security. Apply the additive migration with `npm run db:migrate:fee-overrides-staff-attendance`.
-
-## Lunch Register and Feeding
-The `/feeding` workspace automatically creates a feeding account for each existing and newly added student. Configure non-overlapping academic terms, scheduled weekdays, class-specific daily rates, and approved holidays, vacations, or additional school days. Rate changes require a future effective date; historical obligation snapshots and allocated receipts are preserved. Daily, weekly, monthly, and termly payment frequencies are stored with effective-dated history.
-
-Administrators, accountants, and the Feeding Officer can use the authorized register and feeding-payment workflows. Administrators manage rates and the feeding calendar; administrators/accountants manage accounts, frequencies, financial reports, receipts, and refunds. The Feeding Officer can record feeding-only payments and daily serving coverage, but cannot post tuition or access combined financial reports. Assign the `Feeding Officer` role through Accounts & Roles.
-
-The Fees page records offline cashier payments for school fees only, feeding only, or both. Combined receipts allocate school-fee components to the existing School Fees transaction ledger and feeding components to a separate Feeding operational ledger. School-fee receipts cannot exceed billed balances; feeding payments may be partial or create advance credit. Refunds reverse the original component allocations. No online payment gateway or parent-initiated payment is configured. Excel exports are available for daily, weekly, monthly, termly, class-collection, outstanding-balance, advance-credit, and payment-history reports.
-
-For an existing database, apply `npm run db:migrate:feeding` using a direct connection (`DATABASE_URL_UNPOOLED` or a non-pooler `DATABASE_URL`). `npm run db:init` includes this additive migration for a fresh database. Configure terms, weekday schedules, class rates, and calendar exceptions in `/feeding` before recording feeding payments. No production migration is applied automatically.
 
 ## Staff registry
 The Staff Registry role selector includes common school job titles across teaching, administration, finance, library, inventory, IT, health, support, and operations, plus an `Other` option for custom titles. These are employee job titles used for staff records and payroll, not application login permissions.

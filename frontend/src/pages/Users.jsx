@@ -3,13 +3,13 @@ import { getUsers, registerUser, resetUserPassword, updateUser, deleteUser } fro
 import { getClasses } from '../api/classes';
 import { getSubjects } from '../api/subjects';
 
-const assignableRoles = new Set(['admin', 'teacher', 'accountant', 'feeding_tuckshop_officer', 'librarian', 'inventory', 'store', 'storekeeper']);
+const assignableRoles = new Set(['admin', 'teacher', 'accountant', 'librarian', 'inventory', 'store', 'storekeeper']);
 
 // Helper to extract initials for user avatars
 const getInitials = (name) => {
   return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 };
-const getRoleLabel = (role) => ({ admin: 'Administrator', librarian: 'Librarian', inventory: 'Inventory', store: 'Inventory', storekeeper: 'Storekeeper', teacher: 'Teacher', accountant: 'Accountant', feeding_tuckshop_officer: 'Feeding Officer' }[role] || role);
+const getRoleLabel = (role) => ({ admin: 'Administrator', librarian: 'Librarian', inventory: 'Inventory', store: 'Inventory', storekeeper: 'Storekeeper', teacher: 'Teacher', accountant: 'Accountant' }[role] || role);
 
 function Users() {
   const user = JSON.parse(localStorage.getItem('user') || 'null');
@@ -292,7 +292,6 @@ function Users() {
                 <option value="admin">Administrator</option>
                 <option value="teacher">Teacher</option>
                 <option value="accountant">Accountant</option>
-                <option value="feeding_tuckshop_officer">Feeding Officer</option>
                 <option value="librarian">Librarian</option>
                 <option value="inventory">Inventory</option>
                 <option value="storekeeper">Storekeeper</option>

@@ -19,7 +19,6 @@ const payrollRoutes = require('./payroll');
 const libraryRoutes = require('./library');
 const aiRoutes = require('./ai');
 const studentPortalRoutes = require('./studentPortal');
-const feedingRoutes = require('./feeding');
 
 const router = express.Router();
 
@@ -29,7 +28,6 @@ router.use('/students', studentRoutes);
 router.use('/classes', classRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/fees', feesRoutes);
-router.use('/feeding', feedingRoutes);
 router.use('/results', resultsRoutes);
 router.use('/users', usersRoutes);
 router.use('/announcements', announcementRoutes);

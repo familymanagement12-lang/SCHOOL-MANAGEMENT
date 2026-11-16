@@ -26,8 +26,6 @@ import Library from './pages/Library';
 import McCarthyAI from './pages/McCarthyAI';
 import FinanceDashboard from './pages/FinanceDashboard';
 import FinanceAudit from './pages/FinanceAudit';
-import Feeding from './pages/Feeding';
-import PaymentReceipt from './pages/PaymentReceipt';
 import {
   StudentPortalLayout, StudentDashboard, StudentProfile, StudentSubjects, StudentTimetable,
   StudentResults, StudentAttendance, StudentAnnouncements, StudentNotifications,
@@ -48,9 +46,8 @@ const StaffRoute = ({ children }) => {
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
   if (user?.role === 'student') return <Navigate to="/student" replace />;
   if (user?.role === 'accountant'
-      && !['/', '/fees', '/feeding', '/transactions', '/finance-audit', '/payroll'].includes(pathname)
-      && !pathname.startsWith('/receipt/')
-      && !pathname.startsWith('/payment-receipt/')) {
+      && !['/', '/fees', '/transactions', '/finance-audit', '/payroll'].includes(pathname)
+      && !pathname.startsWith('/receipt/')) {
     return <Navigate to="/" replace />;
   }
   return children;
@@ -92,7 +89,6 @@ function App() {
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/report-card/:studentId" element={<ReportCard />} />
       <Route path="/receipt/:studentId/:feeId" element={<Receipt />} />
-      <Route path="/payment-receipt/:receiptId" element={<ProtectedRoute><AllowedRoles roles={['admin', 'accountant', 'feeding_tuckshop_officer']}><PaymentReceipt /></AllowedRoles></ProtectedRoute>} />
       <Route path="/student" element={<ProtectedRoute><StudentRoute><StudentPortalLayout /></StudentRoute></ProtectedRoute>}>
         <Route index element={<StudentDashboard />} />
         <Route path="profile" element={<StudentProfile />} />
@@ -114,7 +110,6 @@ function App() {
         <Route path="timetable" element={<Timetable />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="fees" element={<AllowedRoles roles={['admin', 'accountant']}><Fees /></AllowedRoles>} />
-        <Route path="feeding" element={<AllowedRoles roles={['admin', 'accountant', 'feeding_tuckshop_officer']}><Feeding /></AllowedRoles>} />
         <Route path="results" element={<Results />} />
         <Route path="transactions" element={<AllowedRoles roles={['admin', 'accountant']}><Transactions /></AllowedRoles>} />
         <Route path="finance-audit" element={<AllowedRoles roles={['admin', 'accountant']}><FinanceAudit /></AllowedRoles>} />
