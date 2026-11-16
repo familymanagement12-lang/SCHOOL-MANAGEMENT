@@ -1,12 +1,11 @@
 const pool = require('../config/db');
-const { MAIN_FINANCE_TRANSACTION_FILTER } = require('../services/financeScopes');
 
 const getTransactions = async (req, res, next) => {
   const { school_id } = req.user;
   try {
     const result = await pool.query(
       `SELECT * FROM transactions
-       WHERE school_id = $1 AND ${MAIN_FINANCE_TRANSACTION_FILTER}
+       WHERE school_id = $1
        ORDER BY date DESC, created_at DESC`,
       [school_id]
     );
@@ -26,7 +25,7 @@ const getFinanceReport = async (req, res, next) => {
     const result = await pool.query(
       `SELECT type, category, SUM(amount) as total
        FROM transactions
-       WHERE school_id = $1 AND ${MAIN_FINANCE_TRANSACTION_FILTER}
+       WHERE school_id = $1
          AND date >= $2 AND date <= $3
        GROUP BY type, category
        ORDER BY type, total DESC`,
@@ -80,17 +79,10 @@ const deleteTransaction = async (req, res, next) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'DELETE FROM transactions WHERE id = $1 AND school_id = $2 AND source_type IS NULL RETURNING *',
+      'DELETE FROM transactions WHERE id = $1 AND school_id = $2 RETURNING *',
       [id, school_id]
     );
     if (!result.rows.length) {
-      const linked = await pool.query(
-        'SELECT source_type FROM transactions WHERE id = $1 AND school_id = $2',
-        [id, school_id]
-      );
-      if (linked.rows[0]?.source_type) {
-        return res.status(409).json({ message: 'Operational finance entries cannot be deleted here. Correct the original feeding, tuckshop, or purchase record instead.' });
-      }
       return res.status(404).json({ message: 'Transaction not found.' });
     }
     res.json({ message: 'Transaction deleted successfully.' });

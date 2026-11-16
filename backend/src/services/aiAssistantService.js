@@ -1,5 +1,4 @@
 const pool = require('../config/db');
-const { MAIN_FINANCE_TRANSACTION_FILTER } = require('./financeScopes');
 
 const ALLOWED_ROLES = new Set(['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper']);
 const INTENTS = [
@@ -168,7 +167,7 @@ async function collectVerifiedFacts(user, intent, question) {
               COALESCE(SUM(amount), 0)::NUMERIC(12,2)::FLOAT AS amount,
               MIN(date)::TEXT AS first_recorded, MAX(date)::TEXT AS last_recorded
        FROM transactions
-       WHERE school_id = $1 AND ${MAIN_FINANCE_TRANSACTION_FILTER}
+       WHERE school_id = $1
        GROUP BY type, category ORDER BY type, category`, [schoolId]
     );
     data = result.rows;

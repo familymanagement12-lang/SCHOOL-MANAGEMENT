@@ -26,11 +26,6 @@ import Library from './pages/Library';
 import McCarthyAI from './pages/McCarthyAI';
 import FinanceDashboard from './pages/FinanceDashboard';
 import FinanceAudit from './pages/FinanceAudit';
-import Feeding from './pages/Feeding';
-import Tuckshop from './pages/Tuckshop';
-import FeedingWorkbookSection from './pages/FeedingWorkbookSection';
-import FeedingImportCenter from './pages/FeedingImportCenter';
-import { hasOperationalPermission } from './utils/operationalPermissions';
 import {
   StudentPortalLayout, StudentDashboard, StudentProfile, StudentSubjects, StudentTimetable,
   StudentResults, StudentAttendance, StudentAnnouncements, StudentNotifications,
@@ -50,20 +45,8 @@ const StaffRoute = ({ children }) => {
   const { pathname } = useLocation();
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
   if (user?.role === 'student') return <Navigate to="/student" replace />;
-  const operationalPageAllowed = pathname.startsWith('/feeding')
-    ? hasOperationalPermission(user, 'feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read')
-      || hasOperationalPermission(user, 'feeding.market.read', 'feeding.market.manage', 'feeding.marketing.read', 'feeding.marketing.manage', 'feeding.import.review', 'feeding.import.confirm', 'feeding.export', 'feeding.settings.manage')
-    : pathname === '/tuckshop'
-      ? hasOperationalPermission(user, 'tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read')
-      : false;
-  if (user?.role === 'feeding_tuckshop_officer'
-      && pathname !== '/'
-      && !operationalPageAllowed) {
-    return <Navigate to="/" replace />;
-  }
   if (user?.role === 'accountant'
       && !['/', '/fees', '/transactions', '/finance-audit', '/payroll'].includes(pathname)
-      && !operationalPageAllowed
       && !pathname.startsWith('/receipt/')) {
     return <Navigate to="/" replace />;
   }
@@ -82,12 +65,6 @@ const AllowedRoles = ({ roles, children }) => {
   return roles.includes(user?.role) ? children : <Navigate to="/" replace />;
 };
 
-const AllowedOperationalPermissions = ({ permissions, children }) => {
-  let user;
-  try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
-  return hasOperationalPermission(user, ...permissions) ? children : <Navigate to="/" replace />;
-};
-
 // Helper component to resolve the correct dashboard based on role
 const RoleBasedDashboard = () => {
   const userStr = localStorage.getItem('user');
@@ -100,21 +77,6 @@ const RoleBasedDashboard = () => {
   if (role === 'teacher') return <TeacherDashboard />;
   if (role === 'inventory' || role === 'store' || role === 'storekeeper') return <Inventory />;
   if (role === 'librarian') return <Library />;
-  if (role === 'feeding_tuckshop_officer') {
-    if (hasOperationalPermission(user, 'feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.reports.read')) return <Navigate to="/feeding" replace />;
-    if (hasOperationalPermission(user, 'tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.purchases.read', 'tuckshop.purchases.create', 'tuckshop.purchases.approve', 'tuckshop.reports.read')) return <Navigate to="/tuckshop" replace />;
-    if (hasOperationalPermission(user, 'feeding.market.read', 'feeding.market.manage')) return <Navigate to="/feeding/market-stock" replace />;
-    if (hasOperationalPermission(user, 'feeding.marketing.read', 'feeding.marketing.manage')) return <Navigate to="/feeding/marketing" replace />;
-    if (hasOperationalPermission(user, 'feeding.import.review', 'feeding.import.confirm')) return <Navigate to="/feeding/imports" replace />;
-    return (
-      <div className="page">
-        <section className="data-panel">
-          <h1>Operational access not assigned</h1>
-          <p>Ask a school administrator to grant the specific Feeding or Tuckshop permissions you need.</p>
-        </section>
-      </div>
-    );
-  }
   return <Dashboard />;
 };
 
@@ -154,11 +116,6 @@ function App() {
         <Route path="inventory" element={<AllowedRoles roles={['admin', 'inventory', 'store', 'storekeeper', 'teacher']}><Inventory /></AllowedRoles>} />
         <Route path="employees" element={<Employees />} />
         <Route path="payroll" element={<AllowedRoles roles={['admin', 'accountant']}><Payroll /></AllowedRoles>} />
-        <Route path="feeding" element={<AllowedOperationalPermissions permissions={['feeding.access', 'feeding.students.read', 'feeding.rates.read', 'feeding.rates.manage', 'feeding.payments.read', 'feeding.payments.create', 'feeding.register.read', 'feeding.register.manage', 'feeding.calendar.manage', 'feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve', 'feeding.advances.manage', 'feeding.reports.read']}><Feeding /></AllowedOperationalPermissions>} />
-        <Route path="feeding/market-stock" element={<AllowedOperationalPermissions permissions={['feeding.market.read', 'feeding.market.manage']}><FeedingWorkbookSection section="market" /></AllowedOperationalPermissions>} />
-        <Route path="feeding/marketing" element={<AllowedOperationalPermissions permissions={['feeding.marketing.read', 'feeding.marketing.manage']}><FeedingWorkbookSection section="marketing" /></AllowedOperationalPermissions>} />
-        <Route path="feeding/imports" element={<AllowedOperationalPermissions permissions={['feeding.import.review']}><FeedingImportCenter /></AllowedOperationalPermissions>} />
-        <Route path="tuckshop" element={<AllowedOperationalPermissions permissions={['tuckshop.access', 'tuckshop.products.read', 'tuckshop.products.manage', 'tuckshop.sales.read', 'tuckshop.sales.create', 'tuckshop.stock.read', 'tuckshop.stock.manage', 'tuckshop.purchases.create', 'tuckshop.purchases.read', 'tuckshop.purchases.approve', 'tuckshop.sales.reconcile', 'tuckshop.reports.read']}><Tuckshop /></AllowedOperationalPermissions>} />
         <Route path="library" element={<Library />} />
         <Route path="ai" element={<McCarthyAI />} />
         <Route path="announcements" element={<Announcements />} />

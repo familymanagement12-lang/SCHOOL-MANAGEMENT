@@ -2,8 +2,6 @@ const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Resend } = require('resend');
-const { OPERATIONAL_PERMISSIONS } = require('../services/operationalPermissions');
-const { getEffectivePermissions } = require('../services/permissionAccess');
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const getUsers = async (req, res, next) => {
@@ -11,19 +9,11 @@ const getUsers = async (req, res, next) => {
 
   try {
     const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.role, u.is_active, u.created_at, u.subjects,
-              COALESCE(ARRAY(
-                SELECT p.permission FROM user_permissions p
-                WHERE p.school_id = u.school_id AND p.user_id = u.id
-                ORDER BY p.permission
-              ), ARRAY[]::TEXT[]) AS permissions
+      `SELECT u.id, u.name, u.email, u.role, u.is_active, u.created_at, u.subjects
        FROM users u WHERE u.school_id = $1 ORDER BY u.created_at DESC`,
       [school_id]
     );
-    res.json(result.rows.map((user) => ({
-      ...user,
-      permissions: [...getEffectivePermissions(user.role, user.permissions)].sort(),
-    })));
+    res.json(result.rows);
   } catch (error) {
     next(error);
   }
@@ -36,11 +26,9 @@ const createUser = async (req, res, next) => {
   if (!name || !email || !role) {
     return res.status(400).json({ message: 'Name, email, and role are required.' });
   }
-  if (!['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) {
+  if (!['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant'].includes(role)) {
     return res.status(400).json({ message: 'Invalid user role.' });
   }
-  const permissions = normalizePermissions(req.body.permissions);
-  if (!permissions) return res.status(400).json({ message: 'One or more operational permissions are invalid.' });
 
   try {
     // 1. Auto-generate an 8-character secure password
@@ -58,7 +46,6 @@ const createUser = async (req, res, next) => {
         'INSERT INTO users (school_id, name, email, password, role, subjects, is_active, verification_token) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role, subjects, is_active, created_at',
         [school_id, name, email, hashedPassword, role, subjects || [], is_active !== false, verificationToken]
       );
-      await replaceUserPermissions(client, school_id, result.rows[0].id, permissions, req.user.id);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -161,11 +148,7 @@ const updateUser = async (req, res, next) => {
   const { school_id } = req.user;
   const { id } = req.params;
   const { name, email, role, is_active, subjects } = req.body;
-  if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
-  const permissions = role || req.body.permissions !== undefined
-    ? normalizePermissions(req.body.permissions)
-    : null;
-  if (permissions === null && req.body.permissions !== undefined) return res.status(400).json({ message: 'One or more operational permissions are invalid.' });
+  if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
 
   try {
     const client = await pool.connect();
@@ -183,9 +166,6 @@ const updateUser = async (req, res, next) => {
          RETURNING id, name, email, role, is_active, subjects, created_at`,
         [name, email, role, is_active, subjects, id, school_id]
       );
-      if (result.rows.length && permissions !== null) {
-        await replaceUserPermissions(client, school_id, id, permissions, req.user.id);
-      }
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -247,21 +227,3 @@ const deleteUser = async (req, res, next) => {
 };
 
 module.exports = { getUsers, createUser, changePassword, resetUserPassword, updateUser, verifyEmail, deleteUser };
-
-function normalizePermissions(requestedPermissions) {
-  const permissions = requestedPermissions === undefined ? [] : requestedPermissions;
-  if (!Array.isArray(permissions) || permissions.some((permission) => !OPERATIONAL_PERMISSIONS.includes(permission))) {
-    return null;
-  }
-  return [...new Set(permissions)];
-}
-
-async function replaceUserPermissions(client, schoolId, userId, permissions, actorId) {
-  await client.query('DELETE FROM user_permissions WHERE school_id = $1 AND user_id = $2', [schoolId, userId]);
-  if (!permissions.length) return;
-  await client.query(
-    `INSERT INTO user_permissions (school_id, user_id, permission, updated_by)
-     SELECT $1, $2, permission, $4 FROM UNNEST($3::TEXT[]) AS permission`,
-    [schoolId, userId, permissions, actorId]
-  );
-}
