@@ -57,9 +57,13 @@ const createTransaction = async (req, res, next) => {
   const { school_id } = req.user;
   const { type, category, amount, reference, description, date } = req.body;
   const numericAmount = Number(amount);
-  if (!['income', 'expenditure'].includes(type) || !category?.trim()
+  if (!['income', 'expenditure'].includes(type) || typeof category !== 'string' || !category.trim()
       || !Number.isFinite(numericAmount) || numericAmount <= 0 || !date) {
     return res.status(400).json({ message: 'Choose a transaction type, category, positive amount, and date.' });
+  }
+  if ((type === 'income' && category.trim().toLowerCase() === 'school fees')
+      || (type === 'expenditure' && category.trim().toLowerCase() === 'school fees refund')) {
+    return res.status(409).json({ message: 'Use the receipt payment and refund workflows so school-fee balances remain correctly allocated.' });
   }
 
   try {
@@ -79,10 +83,20 @@ const deleteTransaction = async (req, res, next) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'DELETE FROM transactions WHERE id = $1 AND school_id = $2 RETURNING *',
+      `DELETE FROM transactions
+       WHERE id = $1 AND school_id = $2
+         AND payment_receipt_id IS NULL AND payment_refund_id IS NULL
+       RETURNING *`,
       [id, school_id]
     );
     if (!result.rows.length) {
+      const linked = await pool.query(
+        'SELECT 1 FROM transactions WHERE id = $1 AND school_id = $2 AND (payment_receipt_id IS NOT NULL OR payment_refund_id IS NOT NULL)',
+        [id, school_id]
+      );
+      if (linked.rowCount) {
+        return res.status(409).json({ message: 'Payment-linked transactions cannot be deleted. Record a component refund instead.' });
+      }
       return res.status(404).json({ message: 'Transaction not found.' });
     }
     res.json({ message: 'Transaction deleted successfully.' });

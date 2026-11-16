@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getClasses } from '../api/classes';
 import {
   getStudents, createStudent, updateStudent, deleteStudent,
@@ -237,6 +238,7 @@ function Students() {
                     <td>{student.disability ? student.disability : 'None'}</td>
                     <td className="actions">
                       <button className="btn-small btn-edit" onClick={() => handleOpenModal(student)}>Edit</button>
+                      {isAdmin && <Link className="btn-small btn-edit" to={`/feeding?student_id=${student.id}`}>Feeding account</Link>}
                       {isAdmin && student.account_user_id && <>
                         <button className="btn-small btn-edit" onClick={() => handleAccountStatus(student)}>{student.account_active ? 'Deactivate portal' : 'Activate portal'}</button>
                         <button className="btn-small btn-edit" onClick={() => handlePasswordReset(student)}>Reset password</button>
