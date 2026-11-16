@@ -8,6 +8,7 @@ const {
   parseDate,
 } = require('../services/feedingCoverage');
 const { getFigureAccess, getWorkbookAccess } = require('../services/feedingWorkbookAccess');
+const { getEffectivePermissions } = require('../services/permissionAccess');
 
 const WORKBOOK_ACCESS_PERMISSIONS = [
   'feeding.reports.read',
@@ -26,7 +27,10 @@ async function getWorkbookPermissions(req) {
      WHERE school_id = $1 AND user_id = $2 AND permission = ANY($3::TEXT[])`,
     [req.user.school_id, req.user.id, WORKBOOK_ACCESS_PERMISSIONS]
   );
-  return new Set(result.rows.map((row) => row.permission));
+  return getEffectivePermissions(
+    req.user.role,
+    result.rows.map((row) => row.permission)
+  );
 }
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -430,12 +434,12 @@ const getFeedingReport = async (req, res, next) => {
   try {
     const granted = req.user.role === 'admin'
       ? new Set(['feeding.reports.read', 'tuckshop.reports.read'])
-      : new Set((await pool.query(
+      : getEffectivePermissions(req.user.role, new Set((await pool.query(
         `SELECT permission FROM user_permissions
          WHERE school_id = $1 AND user_id = $2
            AND permission IN ('feeding.reports.read', 'tuckshop.reports.read')`,
         [req.user.school_id, req.user.id]
-      )).rows.map((row) => row.permission));
+      )).rows.map((row) => row.permission)));
     const [
       payments, sales, purchases, dailyCollections, classCollections, methodCollections,
       staffCollections, tuckshopSalesByDate, feedingWeeklyCollections, weeklyOperations,
@@ -1498,20 +1502,37 @@ const createMarketStockItem = async (req, res, next) => {
 
 const getKitchenPurchases = async (req, res, next) => {
   try {
-    const permittedPurposes = req.marketPurchasesOnly
-      ? ['feeding']
-      : req.user.role === 'admin'
-      ? ['feeding', 'kitchen']
-      : (await pool.query(
+    const purchasePermissions = [
+      'feeding.purchases.read',
+      'feeding.purchases.create',
+      'feeding.purchases.approve',
+      'tuckshop.purchases.read',
+      'tuckshop.purchases.create',
+      'tuckshop.purchases.approve',
+    ];
+    let permittedPurposes;
+    if (req.marketPurchasesOnly) {
+      permittedPurposes = ['feeding'];
+    } else if (req.user.role === 'admin') {
+      permittedPurposes = ['feeding', 'kitchen'];
+    } else {
+      const permissionsResult = await pool.query(
         `SELECT permission FROM user_permissions
          WHERE school_id = $1 AND user_id = $2
            AND permission = ANY($3::TEXT[])`,
         [
           req.user.school_id, req.user.id,
-          ['feeding.purchases.read', 'feeding.purchases.create', 'feeding.purchases.approve',
-            'tuckshop.purchases.read', 'tuckshop.purchases.create', 'tuckshop.purchases.approve'],
+          purchasePermissions,
         ]
-      )).rows.map((row) => row.permission.startsWith('feeding.') ? 'feeding' : 'kitchen');
+      );
+      const granted = getEffectivePermissions(
+        req.user.role,
+        new Set(permissionsResult.rows.map((row) => row.permission))
+      );
+      permittedPurposes = [...granted]
+        .filter((permission) => purchasePermissions.includes(permission))
+        .map((permission) => permission.startsWith('feeding.') ? 'feeding' : 'kitchen');
+    }
     const uniquePurposes = [...new Set(permittedPurposes)];
     const result = await pool.query(
       `SELECT p.id, p.purchase_date, p.purpose, p.expense_category, p.total_amount,

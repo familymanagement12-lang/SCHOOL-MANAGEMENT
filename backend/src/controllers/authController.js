@@ -4,6 +4,7 @@ const pool = require('../config/db');
 const crypto = require('crypto');
 const { Resend } = require('resend');
 const requestContext = require('../config/requestContext');
+const { getEffectivePermissions } = require('../services/permissionAccess');
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const createToken = (user) => {
@@ -70,8 +71,12 @@ const login = async (req, res, next) => {
         [user.school_id, user.id]
       )
     );
+    const permissions = getEffectivePermissions(
+      user.role,
+      permissionsResult.rows.map((row) => row.permission)
+    );
     const token = createToken(user);
-    res.json({ token, user: { id: user.id, email: user.email, role: user.role, school_id: user.school_id, name: user.name, must_change_password: user.must_change_password, permissions: permissionsResult.rows.map((row) => row.permission) } });
+    res.json({ token, user: { id: user.id, email: user.email, role: user.role, school_id: user.school_id, name: user.name, must_change_password: user.must_change_password, permissions: [...permissions].sort() } });
   } catch (error) {
     next(error);
   }

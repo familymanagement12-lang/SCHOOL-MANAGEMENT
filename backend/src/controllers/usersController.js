@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Resend } = require('resend');
 const { OPERATIONAL_PERMISSIONS } = require('../services/operationalPermissions');
+const { getEffectivePermissions } = require('../services/permissionAccess');
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const getUsers = async (req, res, next) => {
@@ -19,7 +20,10 @@ const getUsers = async (req, res, next) => {
        FROM users u WHERE u.school_id = $1 ORDER BY u.created_at DESC`,
       [school_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map((user) => ({
+      ...user,
+      permissions: [...getEffectivePermissions(user.role, user.permissions)].sort(),
+    })));
   } catch (error) {
     next(error);
   }

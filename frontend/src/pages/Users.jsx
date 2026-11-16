@@ -115,11 +115,20 @@ function Users() {
     const { name, value, type, checked } = event.target;
     setFormData((previous) => ({
       ...previous,
-      [name]: name === 'permissions'
-        ? checked
-          ? [...new Set([...(previous.permissions || []), value])]
-          : (previous.permissions || []).filter((permission) => permission !== value)
-        : type === 'checkbox' ? checked : value,
+      ...(name === 'role'
+        ? {
+          role: value,
+          permissions: value === 'feeding_tuckshop_officer'
+            ? operationalPermissions.map(([permission]) => permission)
+            : previous.role === 'feeding_tuckshop_officer' ? [] : previous.permissions,
+        }
+        : {
+          [name]: name === 'permissions'
+            ? checked
+              ? [...new Set([...(previous.permissions || []), value])]
+              : (previous.permissions || []).filter((permission) => permission !== value)
+            : type === 'checkbox' ? checked : value,
+        }),
     }));
   };
 
@@ -356,7 +365,11 @@ function Users() {
 
               <fieldset style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
                 <legend>Operational permissions</legend>
-                <p className="muted-copy">Permissions are granted individually. The Feeding &amp; Tuckshop Officer role does not automatically grant access to every operational area.</p>
+                <p className="muted-copy">
+                  {formData.role === 'feeding_tuckshop_officer'
+                    ? 'This role automatically receives all Feeding & Tuckshop operational permissions. General finance and administration access are not included.'
+                    : 'Operational permissions are granted individually.'}
+                </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.5rem' }}>
                   {operationalPermissions.map(([permission, label]) => (
                     <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
@@ -366,6 +379,7 @@ function Users() {
                         value={permission}
                         checked={(formData.permissions || []).includes(permission)}
                         onChange={handleInputChange}
+                        disabled={formData.role === 'feeding_tuckshop_officer'}
                         style={{ width: 'auto', margin: 0 }}
                       />
                       {label}

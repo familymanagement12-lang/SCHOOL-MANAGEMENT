@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { hasAnyPermission } = require('../services/permissionAccess');
 const {
   parseWorkbook,
   validateReviewValues,
@@ -226,7 +227,13 @@ const getHistoricalWorkbookRows = async (req, res, next) => {
          LIMIT 1`,
         [req.user.school_id, req.user.id, modulePermissions[module]]
       );
-      if (!permissions.rows.length) return res.status(403).json({ message: 'You do not have permission to view this workbook section.' });
+      if (!hasAnyPermission(
+        req.user.role,
+        new Set(permissions.rows.map((row) => row.permission)),
+        modulePermissions[module]
+      )) {
+        return res.status(403).json({ message: 'You do not have permission to view this workbook section.' });
+      }
     }
     const result = await pool.query(
       `SELECT i.id AS import_id, i.file_name, i.academic_year, i.term,
