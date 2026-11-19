@@ -77,6 +77,7 @@ const RoleBasedDashboard = () => {
 
   if (role === 'student') return <Navigate to="/student" replace />;
   if (role === 'accountant') return <FinanceDashboard />;
+  if (role === 'feeding_tuckshop_officer') return <Feeding />;
   if (role === 'teacher') return <TeacherDashboard />;
   if (role === 'inventory' || role === 'store' || role === 'storekeeper') return <Inventory />;
   if (role === 'librarian') return <Library />;
