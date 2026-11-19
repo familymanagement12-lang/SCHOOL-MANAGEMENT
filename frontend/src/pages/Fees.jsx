@@ -1,9 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getFeesByStudent, recordFee } from '../api/fees';
+import { getFeesByStudent } from '../api/fees';
 import { getStudents } from '../api/students';
 import { getClasses } from '../api/classes';
 import { createFeeStructure } from '../api/fees';
+import {
+  getFeedingAccount, getFeedingTerms, getPaymentReceipts, recordSchoolPayment, refundPayment,
+} from '../api/feeding';
+
+const newPaymentKey = () => window.crypto?.randomUUID?.()
+  || `payment-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const refundableAmount = (receipt, component) => {
+  const amount = Number(component === 'school_fee' ? receipt.school_fee_amount : receipt.feeding_amount);
+  const refunded = receipt.refunds
+    .filter((refund) => refund.component === component)
+    .reduce((total, refund) => total + Number(refund.amount), 0);
+  return Math.max(0, amount - refunded);
+};
 
 const getCurrentUser = () => {
   try {
@@ -19,10 +32,28 @@ function Fees() {
   const [classes, setClasses] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [fees, setFees] = useState([]);
+  const [feedingAccount, setFeedingAccount] = useState(null);
+  const [feedingTerms, setFeedingTerms] = useState([]);
+  const [paymentReceipt, setPaymentReceipt] = useState(null);
+  const [paymentReceipts, setPaymentReceipts] = useState([]);
+  const [refundReceipt, setRefundReceipt] = useState(null);
+  const [refundForm, setRefundForm] = useState({
+    component: 'school_fee',
+    amount: '',
+    reason: '',
+    reference: '',
+    refund_date: new Date().toISOString().split('T')[0],
+  });
+  const refundKey = useRef(newPaymentKey());
+  const paymentKey = useRef(newPaymentKey());
   const [formData, setFormData] = useState({
-    amount_paid: '',
-    due_date: new Date().toISOString().split('T')[0],
-    description: '',
+    school_fee_amount: '',
+    feeding_amount: '',
+    payment_method: 'cash',
+    payment_date: new Date().toISOString().split('T')[0],
+    reference: '',
+    academic_year: '',
+    term: '',
   });
   const [showStructureModal, setShowStructureModal] = useState(false);
   const [structureData, setStructureData] = useState({
@@ -44,8 +75,16 @@ function Fees() {
   useEffect(() => {
     if (selectedStudent) {
       fetchFees(selectedStudent);
+      getPaymentReceipts({ student_id: selectedStudent })
+        .then((response) => setPaymentReceipts(response.data))
+        .catch((requestError) => setError(requestError.response?.data?.message || 'Unable to load payment receipts.'));
+      getFeedingAccount(selectedStudent)
+        .then((response) => setFeedingAccount(response.data))
+        .catch(() => setFeedingAccount(null));
     } else {
       setFees([]);
+      setPaymentReceipts([]);
+      setFeedingAccount(null);
     }
   }, [selectedStudent]);
 
@@ -55,8 +94,10 @@ function Fees() {
         getStudents(),
         getClasses()
       ]);
+      const termsRes = await getFeedingTerms();
       setStudents(studentsRes.data);
       setClasses(classesRes.data);
+      setFeedingTerms(termsRes.data);
       setSelectedStudent(studentsRes.data[0]?.id ? String(studentsRes.data[0].id) : '');
       setLoading(false);
     } catch (err) {
@@ -90,7 +131,7 @@ function Fees() {
     balance: sum.balance + Number(fee.balance || 0),
   }), { due: 0, paid: 0, balance: 0 }), [fees]);
 
-  const currencyCode = localStorage.getItem('sms_currency') || 'USD';
+  const currencyCode = localStorage.getItem('sms_currency') || 'GHS';
   const formatMoney = (value) => Number(value || 0).toLocaleString(undefined, {
     style: 'currency',
     currency: currencyCode,
@@ -99,19 +140,56 @@ function Fees() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError('');
+    setPaymentReceipt(null);
 
     try {
-      await recordFee({
+      const response = await recordSchoolPayment({
         student_id: selectedStudent,
-        amount_due: 0,
-        amount_paid: formData.amount_paid || 0,
-        due_date: formData.due_date,
-        description: formData.description,
+        school_fee_amount: formData.school_fee_amount || 0,
+        feeding_amount: formData.feeding_amount || 0,
+        payment_method: formData.payment_method,
+        payment_date: formData.payment_date,
+        reference: formData.reference,
+        academic_year: formData.academic_year || undefined,
+        term: formData.term || undefined,
+        idempotency_key: paymentKey.current,
       });
-      setFormData({ amount_paid: '', due_date: new Date().toISOString().split('T')[0], description: '' });
+      setPaymentReceipt(response.data);
+      paymentKey.current = newPaymentKey();
+      setFormData({
+        school_fee_amount: '',
+        feeding_amount: '',
+        payment_method: 'cash',
+        payment_date: new Date().toISOString().split('T')[0],
+        reference: '',
+        academic_year: '',
+        term: '',
+      });
       await fetchFees(selectedStudent);
+      getFeedingAccount(selectedStudent).then((account) => setFeedingAccount(account.data)).catch(() => {});
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to record fee');
+      setError(err.response?.data?.message || 'Failed to record payment');
+    }
+  };
+
+  const handleRefund = async (event) => {
+    event.preventDefault();
+    setError('');
+    try {
+      await refundPayment(refundReceipt.id, {
+        ...refundForm,
+        idempotency_key: refundKey.current,
+      });
+      setRefundReceipt(null);
+      refundKey.current = newPaymentKey();
+      const [receiptResponse] = await Promise.all([
+        getPaymentReceipts({ student_id: selectedStudent }),
+        fetchFees(selectedStudent),
+      ]);
+      setPaymentReceipts(receiptResponse.data);
+      getFeedingAccount(selectedStudent).then((account) => setFeedingAccount(account.data)).catch(() => {});
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to record refund');
     }
   };
 
@@ -162,7 +240,7 @@ function Fees() {
           <div>
             <p className="eyebrow">Fees</p>
             <h1>Payments Desk</h1>
-            <p>Record billing, payments, balances, and due dates for each student.</p>
+            <p>Manage school-fee invoices and record cashier payments for school fees, feeding, or both.</p>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <select value={selectedStudent} onChange={(event) => setSelectedStudent(event.target.value)}>
@@ -191,7 +269,7 @@ function Fees() {
           <form className="data-panel form-panel" onSubmit={handleSubmit}>
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">New Payment</p>
+                <p className="eyebrow">Cashier-recorded payment</p>
                 <h2>{selectedStudentRecord?.name || 'Select a student'}</h2>
               </div>
             </div>
@@ -207,33 +285,71 @@ function Fees() {
               </div>
             )}
 
-            <label>Amount Paid (Receipt)</label>
+            <p>Enter the amounts received offline. School-fee receipts are allocated to outstanding billed fees; feeding is recorded in its separate operational ledger.</p>
+            <label>School fees received</label>
             <input
               type="number"
               min="0"
               step="0.01"
-              value={formData.amount_paid}
-              onChange={(event) => setFormData({ ...formData, amount_paid: event.target.value })}
-              placeholder="e.g. 200"
+              value={formData.school_fee_amount}
+              onChange={(event) => setFormData({ ...formData, school_fee_amount: event.target.value })}
+              placeholder="0.00"
             />
 
-            <label>Reason / Description</label>
+            <label>Feeding fees received</label>
             <input
-              type="text"
-              value={formData.description}
-              onChange={(event) => setFormData({ ...formData, description: event.target.value })}
-              placeholder="e.g. Partial Term 1 Payment"
+              type="number"
+              min="0"
+              step="0.01"
+              value={formData.feeding_amount}
+              onChange={(event) => setFormData({ ...formData, feeding_amount: event.target.value })}
+              placeholder="0.00"
             />
+            {feedingAccount && <p>Feeding balance this period: {formatMoney(feedingAccount.outstanding_balance)} · Advance credit: {formatMoney(feedingAccount.advance_credit)}</p>}
+
+            <label>Payment method</label>
+            <select value={formData.payment_method} onChange={(event) => setFormData({ ...formData, payment_method: event.target.value })}>
+              <option value="cash">Cash</option>
+              <option value="mobile_money">Mobile money (recorded by cashier)</option>
+              <option value="bank_transfer">Bank transfer (recorded by cashier)</option>
+              <option value="other">Other offline payment</option>
+            </select>
 
             <label>Payment Date</label>
             <input
               type="date"
-              value={formData.due_date}
-              readOnly
-              style={{ opacity: 0.7, cursor: 'not-allowed' }}
+              value={formData.payment_date}
+              onChange={(event) => setFormData({ ...formData, payment_date: event.target.value })}
             />
 
-            <button type="submit" className="btn-primary" disabled={!selectedStudent}>Record Payment</button>
+            <label>Payment reference (optional)</label>
+            <input
+              value={formData.reference}
+              onChange={(event) => setFormData({ ...formData, reference: event.target.value })}
+              maxLength={120}
+            />
+
+            <label>Feeding academic term (optional)</label>
+            <select
+              value={formData.academic_year && formData.term ? `${formData.academic_year}|${formData.term}` : ''}
+              onChange={(event) => {
+                const [academic_year = '', term = ''] = event.target.value.split('|');
+                setFormData({ ...formData, academic_year, term });
+              }}
+            >
+              <option value="">Use the term covering the payment date</option>
+              {feedingTerms.map((feedingTerm) => (
+                <option key={feedingTerm.id} value={`${feedingTerm.academic_year}|${feedingTerm.term}`}>
+                  {feedingTerm.academic_year} · {feedingTerm.term}
+                </option>
+              ))}
+            </select>
+
+            <button type="submit" className="btn-primary" disabled={!selectedStudent || !(Number(formData.school_fee_amount) > 0 || Number(formData.feeding_amount) > 0)}>Record Payment</button>
+            {paymentReceipt && <div className="success">
+              Receipt {paymentReceipt.receipt_number}: School fees {formatMoney(paymentReceipt.school_fee_amount)} · Feeding {formatMoney(paymentReceipt.feeding_amount)} · Total {formatMoney(paymentReceipt.amount_total)}.
+              <div><Link to={`/payment-receipt/${paymentReceipt.id}`}>Open printable receipt</Link></div>
+            </div>}
           </form>
 
           <section className="data-panel">
@@ -275,7 +391,55 @@ function Fees() {
             {fees.length === 0 && <p className="empty-state">No fee records for this student yet.</p>}
           </section>
         </section>
+
+        <section className="data-panel">
+          <div className="panel-heading"><div><p className="eyebrow">Shared receipts</p><h2>Payment and refund history</h2></div></div>
+          <div className="table-wrap">
+            <table><thead><tr><th>Date</th><th>Receipt</th><th>School fees</th><th>Feeding</th><th>Total</th><th>Refunds</th><th>Reference</th><th>Actions</th></tr></thead>
+              <tbody>{paymentReceipts.map((receipt) => (
+                <tr key={receipt.id}>
+                  <td>{receipt.payment_date}</td><td>{receipt.receipt_number}</td>
+                  <td>{formatMoney(receipt.school_fee_amount)}</td><td>{formatMoney(receipt.feeding_amount)}</td>
+                  <td>{formatMoney(receipt.amount_total)}</td>
+                  <td>{receipt.refunds.map((refund) => `${refund.component}: ${formatMoney(refund.amount)}`).join(', ') || '-'}</td>
+                  <td>{receipt.reference || '-'}</td>
+                  <td className="actions">
+                    <Link className="btn-small btn-edit" to={`/payment-receipt/${receipt.id}`}>Receipt</Link>
+                    {(refundableAmount(receipt, 'school_fee') > 0 || refundableAmount(receipt, 'feeding') > 0)
+                      && <button className="btn-small btn-edit" onClick={() => {
+                        const component = refundableAmount(receipt, 'school_fee') > 0 ? 'school_fee' : 'feeding';
+                        setRefundForm({
+                          component, amount: '', reason: '', reference: '',
+                          refund_date: new Date().toISOString().split('T')[0],
+                        });
+                        setRefundReceipt(receipt);
+                        refundKey.current = newPaymentKey();
+                      }}>Refund</button>}
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          {!paymentReceipts.length && <p className="empty-state">No receipts recorded for this student.</p>}
+        </section>
       </div>
+
+      {refundReceipt && <div className="modal-overlay" onClick={() => setRefundReceipt(null)}>
+        <div className="modal" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-header"><h2>Refund receipt {refundReceipt.receipt_number}</h2><button className="btn-close" onClick={() => setRefundReceipt(null)}>x</button></div>
+          <form className="form-panel" onSubmit={handleRefund}>
+            <label>Component<select value={refundForm.component} onChange={(event) => setRefundForm({ ...refundForm, component: event.target.value })}>
+              {refundableAmount(refundReceipt, 'school_fee') > 0 && <option value="school_fee">School fees</option>}
+              {refundableAmount(refundReceipt, 'feeding') > 0 && <option value="feeding">Feeding</option>}
+            </select></label>
+            <label>Refund amount<input type="number" min="0.01" step="0.01" value={refundForm.amount} onChange={(event) => setRefundForm({ ...refundForm, amount: event.target.value })} required /></label>
+            <label>Reason<input value={refundForm.reason} onChange={(event) => setRefundForm({ ...refundForm, reason: event.target.value })} maxLength={500} required /></label>
+            <label>Reference<input value={refundForm.reference} onChange={(event) => setRefundForm({ ...refundForm, reference: event.target.value })} maxLength={120} /></label>
+            <label>Refund date<input type="date" value={refundForm.refund_date} onChange={(event) => setRefundForm({ ...refundForm, refund_date: event.target.value })} required /></label>
+            <button type="submit" className="btn-primary">Record refund</button>
+          </form>
+        </div>
+      </div>}
 
       {showStructureModal && (
         <div className="modal-overlay" onClick={() => setShowStructureModal(false)}>

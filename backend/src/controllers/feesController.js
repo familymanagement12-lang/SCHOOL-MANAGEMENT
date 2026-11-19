@@ -1,41 +1,34 @@
 const pool = require('../config/db');
-const notificationEvents = require('../services/notificationService');
+const { moneyToCents, parseDate } = require('../services/feedingService');
 
 const recordFee = async (req, res, next) => {
   const { school_id } = req.user;
-  const { student_id, amount_due, amount_paid, due_date } = req.body;
+  const { student_id, amount_due, amount_paid, due_date, description } = req.body;
 
-  if (!student_id || amount_due === undefined || amount_paid === undefined) {
-    return res.status(400).json({ message: 'Student ID, amount_due, and amount_paid are required.' });
+  const studentId = Number(student_id);
+  const amountDueCents = moneyToCents(amount_due);
+  const amountPaidCents = moneyToCents(amount_paid);
+  if (!Number.isSafeInteger(studentId) || studentId <= 0
+      || amountDueCents === null || amountDueCents <= 0
+      || amountPaidCents !== 0
+      || (due_date && !parseDate(due_date))
+      || (description && (typeof description !== 'string' || description.trim().length > 500))) {
+    return res.status(400).json({
+      message: 'Create a positive fee invoice with no payment. Record receipts through the combined payments workflow.',
+    });
   }
 
   try {
     const result = await pool.query(
-      'INSERT INTO fees (student_id, amount_due, amount_paid, due_date, school_id) SELECT $1, $2, $3, $4, $5 FROM students WHERE id = $1 AND school_id = $5 RETURNING *',
-      [student_id, amount_due, amount_paid, due_date || null, school_id]
+      `INSERT INTO fees (student_id, amount_due, amount_paid, due_date, description, school_id)
+       SELECT $1, $2, 0, $3, $4, $5 FROM students
+       WHERE id = $1 AND school_id = $5 RETURNING *`,
+      [studentId, (amountDueCents / 100).toFixed(2), due_date || null, description?.trim() || null, school_id]
     );
 
     if (!result.rows.length) {
       return res.status(404).json({ message: 'Student not found in your school.' });
     }
-
-    if (amount_paid > 0) {
-      const studentRes = await pool.query('SELECT name FROM students WHERE id = $1', [student_id]);
-      const studentName = studentRes.rows[0]?.name || 'Student';
-
-      await pool.query(
-        `INSERT INTO transactions (school_id, type, category, amount, reference, description, date)
-         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE)`,
-        [school_id, 'income', 'School Fees', amount_paid, `FEE-${result.rows[0].id}`, `Fee payment received for ${studentName}`]
-      );
-    }
-
-    // Fire the background event
-    notificationEvents.emit('fee.paid', {
-      student_id,
-      amount_paid,
-      balance: result.rows[0].balance
-    });
 
     res.status(201).json(result.rows[0]);
   } catch (error) {

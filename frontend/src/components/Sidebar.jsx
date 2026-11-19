@@ -28,6 +28,7 @@ const sections = [
     links: [
       { path: '/inventory', label: 'School store', icon: Boxes, roles: ['admin', 'inventory', 'store', 'storekeeper', 'teacher'] },
       { path: '/fees', label: 'Fees', icon: WalletCards, roles: ['admin', 'accountant'] },
+      { path: '/feeding', label: 'Lunch & Feeding', icon: WalletCards, roles: ['admin', 'accountant', 'feeding_tuckshop_officer'] },
       { path: '/transactions', label: 'Finance', icon: CircleDollarSign, roles: ['admin', 'accountant'] },
       { path: '/finance-audit', label: 'Finance audit trail', icon: FileBarChart2, roles: ['admin', 'accountant'] },
       { path: '/employees', label: 'Staff', icon: Users, roles: ['admin'] },
@@ -46,6 +47,7 @@ const roleLabels = {
   storekeeper: 'Storekeeper',
   teacher: 'Teacher',
   accountant: 'Accountant',
+  feeding_tuckshop_officer: 'Feeding Officer',
 };
 
 function Sidebar({ mobileOpen = false, onNavigate = () => {} }) {
@@ -53,7 +55,7 @@ function Sidebar({ mobileOpen = false, onNavigate = () => {} }) {
   const user = JSON.parse(localStorage.getItem('user') || 'null');
 
   useEffect(() => {
-    if (user?.role === 'accountant') return;
+    if (['accountant', 'feeding_tuckshop_officer'].includes(user?.role)) return;
     getSettings().then((response) => setSchool(response.data)).catch(() => {});
   }, [user?.role]);
 
