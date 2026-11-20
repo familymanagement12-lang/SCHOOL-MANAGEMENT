@@ -197,21 +197,25 @@ const setSupplierStatus = async (req, res, next) => {
 const listPurchases = async (req, res, next) => {
   try {
     const result = await pool.query(
-            `SELECT p.id, p.supplier_id, p.purchase_reference, p.purchase_date, p.invoice_number, p.status,
-              p.notes, p.created_at, s.name AS supplier_name,
+      `SELECT p.id, p.supplier_id, p.purchase_reference, p.purchase_date, p.invoice_number, p.status,
+              p.notes, p.approval_comment, p.decision_at, p.created_at,
+              s.name AS supplier_name, approver.name AS decision_by_name,
               COALESCE(SUM(pi.quantity_ordered * pi.unit_price), 0)::numeric(14,2) AS total_cost,
               COALESCE(json_agg(json_build_object(
                 'id', pi.id, 'inventory_id', pi.inventory_id, 'item_name', i.item_name,
+                'kitchen_item_plan_id', pi.kitchen_item_plan_id, 'kitchen_item_name', kp.item_name,
                 'quantity_ordered', pi.quantity_ordered, 'quantity_received', pi.quantity_received,
                 'unit_price', pi.unit_price, 'line_total', pi.quantity_ordered * pi.unit_price,
                 'expiry_date', pi.expiry_date, 'item_type', i.item_type
               ) ORDER BY pi.id) FILTER (WHERE pi.id IS NOT NULL), '[]'::json) AS items
        FROM inventory_purchases p
        JOIN inventory_suppliers s ON s.id=p.supplier_id AND s.school_id=p.school_id
+      LEFT JOIN users approver ON approver.id=p.decision_by AND approver.school_id=p.school_id
        LEFT JOIN inventory_purchase_items pi ON pi.purchase_id=p.id AND pi.school_id=p.school_id
        LEFT JOIN inventory i ON i.id=pi.inventory_id AND i.school_id=pi.school_id
+      LEFT JOIN kitchen_item_plans kp ON kp.id=pi.kitchen_item_plan_id AND kp.school_id=pi.school_id
        WHERE p.school_id=$1
-      GROUP BY p.id, s.name ORDER BY p.purchase_date DESC, p.id DESC LIMIT 200`,
+      GROUP BY p.id, s.name, approver.name ORDER BY p.purchase_date DESC, p.id DESC LIMIT 200`,
       [req.user.school_id]
     );
     res.json(result.rows);
@@ -231,16 +235,22 @@ const createPurchase = async (req, res, next) => {
   if (purchase_date && !validDate(purchase_date)) return res.status(400).json({ message: 'Purchase date must use YYYY-MM-DD format.' });
   const normalizedItems = [];
   const seenItems = new Set();
+  const seenKitchenPlans = new Set();
   for (const item of items) {
     const inventoryId = positiveInt(item.inventory_id);
     const quantity = positiveInt(item.quantity_ordered);
     const unitPrice = nonNegativeMoney(item.unit_price);
-    if (!inventoryId || !quantity || unitPrice === null) return res.status(400).json({ message: 'Each purchase line needs an item, positive quantity, and non-negative unit price.' });
+    const kitchenItemPlanId = item.kitchen_item_plan_id ? positiveInt(item.kitchen_item_plan_id) : null;
+    if (!inventoryId || !quantity || unitPrice === null || (item.kitchen_item_plan_id && !kitchenItemPlanId)) {
+      return res.status(400).json({ message: 'Each purchase line needs an item, positive quantity, and non-negative unit price.' });
+    }
     if (seenItems.has(inventoryId)) return res.status(400).json({ message: 'Use only one line per item in a purchase.' });
+    if (kitchenItemPlanId && seenKitchenPlans.has(kitchenItemPlanId)) return res.status(400).json({ message: 'Use each kitchen plan item only once per purchase.' });
     seenItems.add(inventoryId);
+    if (kitchenItemPlanId) seenKitchenPlans.add(kitchenItemPlanId);
     const expiryDate = item.expiry_date ? String(item.expiry_date) : null;
     if (expiryDate && !validDate(expiryDate)) return res.status(400).json({ message: 'Expiry dates must use YYYY-MM-DD format.' });
-    normalizedItems.push({ inventoryId, quantity, unitPrice, expiryDate });
+    normalizedItems.push({ inventoryId, quantity, unitPrice, expiryDate, kitchenItemPlanId });
   }
 
   try {
@@ -259,19 +269,36 @@ const createPurchase = async (req, res, next) => {
         if (!inventoryItem.rows.length || inventoryItem.rows[0].item_status !== 'active') {
           throw fail(400, 'Each purchased item must be active and belong to this school.');
         }
+        if (item.kitchenItemPlanId) {
+          const plan = await client.query(
+            `SELECT id, inventory_id FROM kitchen_item_plans
+             WHERE id=$1 AND school_id=$2 AND is_active=TRUE FOR UPDATE`,
+            [item.kitchenItemPlanId, school_id]
+          );
+          if (!plan.rows.length) throw fail(400, 'Choose an active kitchen plan item from this school.');
+          if (plan.rows[0].inventory_id && Number(plan.rows[0].inventory_id) !== item.inventoryId) {
+            throw fail(400, 'The kitchen plan item is linked to a different inventory item.');
+          }
+          if (!plan.rows[0].inventory_id) {
+            await client.query(
+              'UPDATE kitchen_item_plans SET inventory_id=$1, updated_by=$2, updated_at=NOW() WHERE id=$3 AND school_id=$4',
+              [item.inventoryId, actorId, item.kitchenItemPlanId, school_id]
+            );
+          }
+        }
       }
       const purchase = await client.query(
         `INSERT INTO inventory_purchases
-           (school_id, supplier_id, purchase_reference, purchase_date, invoice_number, notes, created_by)
-         VALUES ($1,$2,$3,COALESCE($4::date,CURRENT_DATE),$5,$6,$7) RETURNING *`,
+           (school_id, supplier_id, purchase_reference, purchase_date, invoice_number, notes, created_by, status)
+         VALUES ($1,$2,$3,COALESCE($4::date,CURRENT_DATE),$5,$6,$7,'pending_approval') RETURNING *`,
         [school_id, supplierId, reference, purchase_date || null, text(invoice_number, 120) || null, text(notes, 1000) || null, actorId]
       );
       for (const item of normalizedItems) {
         await client.query(
           `INSERT INTO inventory_purchase_items
-             (school_id, purchase_id, inventory_id, quantity_ordered, unit_price, expiry_date)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [school_id, purchase.rows[0].id, item.inventoryId, item.quantity, item.unitPrice, item.expiryDate]
+             (school_id, purchase_id, inventory_id, quantity_ordered, unit_price, expiry_date, kitchen_item_plan_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [school_id, purchase.rows[0].id, item.inventoryId, item.quantity, item.unitPrice, item.expiryDate, item.kitchenItemPlanId]
         );
       }
       return purchase.rows[0];
@@ -279,6 +306,30 @@ const createPurchase = async (req, res, next) => {
     res.status(201).json(result);
   } catch (error) {
     respondError(error, res, next);
+  }
+};
+
+const decidePurchase = async (req, res, next) => {
+  const purchaseId = positiveInt(req.params.id);
+  const decision = req.body.decision;
+  const comment = text(req.body.approval_comment, 1000);
+  if (!purchaseId || !['approved', 'rejected'].includes(decision)
+      || (decision === 'rejected' && !comment)) {
+    return res.status(400).json({ message: 'Choose approve or reject; a rejection comment is required.' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE inventory_purchases
+         SET status=$1, decision_by=$2, decision_at=NOW(),
+           approval_comment=$3, updated_at=NOW()
+       WHERE id=$4 AND school_id=$5 AND status='pending_approval'
+      RETURNING id, status, decision_by, decision_at, approval_comment`,
+      [decision, req.user.id, comment || null, purchaseId, req.user.school_id]
+    );
+    if (!result.rowCount) return res.status(409).json({ message: 'Only a pending purchase can be approved or rejected.' });
+    res.json(result.rows[0]);
+  } catch (caught) {
+    respondError(caught, res, next);
   }
 };
 
@@ -1400,7 +1451,7 @@ const searchInventory = async (req, res, next) => {
 
 module.exports = {
   getInventoryDashboard, listSuppliers, saveSupplier, setSupplierStatus,
-  listPurchases, createPurchase, receivePurchaseDelivery,
+  listPurchases, createPurchase, decidePurchase, receivePurchaseDelivery,
   getRequestCatalogue, getInventoryStaff, issueInventory, listIssuances, listAssets, getAssetHistory, registerAsset, adjustAssetQuantity,
   updateAsset, listMaintenance, createMaintenance, completeMaintenance,
   listRequests, createRequest, decideRequest, fulfillRequest, adjustStock,

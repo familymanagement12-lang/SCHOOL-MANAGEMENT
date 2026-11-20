@@ -24,6 +24,7 @@ router.patch('/suppliers/:id/status', authorize(storeRoles), store.setSupplierSt
 
 router.get('/purchases', authorize(storeRoles), store.listPurchases);
 router.post('/purchases', authorize(storeRoles), store.createPurchase);
+router.patch('/purchases/:id/decision', authorize(['admin']), store.decidePurchase);
 router.post('/purchases/:id/receive', authorize(storeRoles), store.receivePurchaseDelivery);
 
 router.get('/issuances', authorize(storeRoles), store.listIssuances);

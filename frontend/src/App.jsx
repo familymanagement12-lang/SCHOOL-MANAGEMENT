@@ -28,6 +28,7 @@ import FinanceDashboard from './pages/FinanceDashboard';
 import FinanceAudit from './pages/FinanceAudit';
 import Feeding from './pages/Feeding';
 import PaymentReceipt from './pages/PaymentReceipt';
+import OperationsRegisters from './pages/OperationsRegisters';
 import {
   StudentPortalLayout, StudentDashboard, StudentProfile, StudentSubjects, StudentTimetable,
   StudentResults, StudentAttendance, StudentAnnouncements, StudentNotifications,
@@ -48,7 +49,7 @@ const StaffRoute = ({ children }) => {
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
   if (user?.role === 'student') return <Navigate to="/student" replace />;
   if (user?.role === 'accountant'
-      && !['/', '/fees', '/feeding', '/transactions', '/finance-audit', '/payroll'].includes(pathname)
+      && !['/', '/fees', '/feeding', '/operations', '/transactions', '/finance-audit', '/payroll'].includes(pathname)
       && !pathname.startsWith('/receipt/')
       && !pathname.startsWith('/payment-receipt/')) {
     return <Navigate to="/" replace />;
@@ -116,6 +117,7 @@ function App() {
         <Route path="attendance" element={<Attendance />} />
         <Route path="fees" element={<AllowedRoles roles={['admin', 'accountant']}><Fees /></AllowedRoles>} />
         <Route path="feeding" element={<AllowedRoles roles={['admin', 'accountant', 'feeding_tuckshop_officer']}><Feeding /></AllowedRoles>} />
+        <Route path="operations" element={<AllowedRoles roles={['admin', 'accountant', 'inventory', 'store', 'storekeeper', 'feeding_tuckshop_officer']}><OperationsRegisters /></AllowedRoles>} />
         <Route path="results" element={<Results />} />
         <Route path="transactions" element={<AllowedRoles roles={['admin', 'accountant']}><Transactions /></AllowedRoles>} />
         <Route path="finance-audit" element={<AllowedRoles roles={['admin', 'accountant']}><FinanceAudit /></AllowedRoles>} />
