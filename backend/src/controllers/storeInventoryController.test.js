@@ -4,10 +4,9 @@ const pool = require('../config/db');
 const {
   adjustAssetQuantity,
   createPurchase,
-  decidePurchase,
   getInventoryStaff,
   issueInventory,
-  receivePurchaseDelivery,
+  listPurchases,
 } = require('./storeInventoryController');
 
 function createResponse() {
@@ -173,14 +172,31 @@ test('only admins may reduce asset quantity by disposal', async () => {
   }
 });
 
-test('new purchases stay pending and link kitchen plan lines without changing stock', async () => {
+test('purchase history query remains compatible without operations schema', async () => {
+  const originalQuery = pool.query;
+  let executedSql = '';
+  pool.query = async (sql, params) => {
+    executedSql = sql;
+    assert.deepEqual(params, [3]);
+    return { rows: [] };
+  };
+  try {
+    const res = createResponse();
+    await listPurchases({ user: { school_id: 3 } }, res, assert.fail);
+    assert.equal(res.statusCode, 200);
+    assert.doesNotMatch(executedSql, /kitchen_item_plans|kitchen_item_plan_id|decision_by/);
+  } finally {
+    pool.query = originalQuery;
+  }
+});
+
+test('purchase orders use existing schema and do not change stock before delivery', async () => {
   const database = installDatabase((sql) => {
     if (sql.includes('FROM inventory_suppliers')) return { rows: [{ id: 4 }], rowCount: 1 };
     if (sql.includes('SELECT id, item_type, item_status FROM inventory')) {
       return { rows: [{ id: 8, item_type: 'consumable', item_status: 'active' }], rowCount: 1 };
     }
-    if (sql.includes('FROM kitchen_item_plans')) return { rows: [{ id: 9, inventory_id: 8 }], rowCount: 1 };
-    if (sql.includes('INSERT INTO inventory_purchases')) return { rows: [{ id: 21, status: 'pending_approval' }], rowCount: 1 };
+    if (sql.includes('INSERT INTO inventory_purchases')) return { rows: [{ id: 21, status: 'ordered' }], rowCount: 1 };
     return { rows: [], rowCount: 1 };
   });
   try {
@@ -189,60 +205,16 @@ test('new purchases stay pending and link kitchen plan lines without changing st
       user: { school_id: 3, id: 7 },
       body: {
         supplier_id: 4,
-        purchase_reference: 'KITCHEN-21',
-        items: [{ inventory_id: 8, kitchen_item_plan_id: 9, quantity_ordered: 5, unit_price: 2 }],
+        purchase_reference: 'STORE-21',
+        items: [{ inventory_id: 8, quantity_ordered: 5, unit_price: 2 }],
       },
     }, res, assert.fail);
     assert.equal(res.statusCode, 201);
     const purchaseInsert = database.statements.find(({ sql }) => sql.includes('INSERT INTO inventory_purchases'));
-    assert.match(purchaseInsert.sql, /'pending_approval'/);
+    assert.doesNotMatch(purchaseInsert.sql, /pending_approval|decision_by/);
     const lineInsert = database.statements.find(({ sql }) => sql.includes('INSERT INTO inventory_purchase_items'));
-    assert.equal(lineInsert.params[6], 9);
+    assert.doesNotMatch(lineInsert.sql, /kitchen_item_plan_id/);
     assert.equal(database.statements.some(({ sql }) => sql.startsWith('UPDATE inventory SET quantity=')), false);
-  } finally {
-    database.restore();
-  }
-});
-
-test('only pending purchases can be approved or rejected', async () => {
-  const originalQuery = pool.query;
-  let executedSql = '';
-  pool.query = async (sql, params) => {
-    executedSql = sql;
-    assert.deepEqual(params, ['approved', 7, null, 21, 3]);
-    return { rows: [{ id: 21, status: 'approved' }], rowCount: 1 };
-  };
-  try {
-    const res = createResponse();
-    await decidePurchase({
-      user: { school_id: 3, id: 7, role: 'admin' },
-      params: { id: '21' },
-      body: { decision: 'approved' },
-    }, res, assert.fail);
-    assert.equal(res.statusCode, 200);
-    assert.match(executedSql, /status='pending_approval'/);
-  } finally {
-    pool.query = originalQuery;
-  }
-});
-
-test('delivery cannot be received before purchase approval', async () => {
-  const database = installDatabase((sql) => {
-    if (sql.includes('SELECT id, status FROM inventory_purchases')) {
-      return { rows: [{ id: 21, status: 'pending_approval' }], rowCount: 1 };
-    }
-    return { rows: [], rowCount: 1 };
-  });
-  try {
-    const res = createResponse();
-    await receivePurchaseDelivery({
-      user: { school_id: 3, id: 7 },
-      params: { id: '21' },
-      body: { delivery_reference: 'DELIVERY-21', items: [{ purchase_item_id: 31, quantity_received: 2 }] },
-    }, res, assert.fail);
-    assert.equal(res.statusCode, 409);
-    assert.equal(database.statements.some(({ sql }) => sql.includes('INSERT INTO inventory_purchase_receipts')), false);
-    assert.ok(database.statements.some(({ sql }) => sql === 'ROLLBACK'));
   } finally {
     database.restore();
   }

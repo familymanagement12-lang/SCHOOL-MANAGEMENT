@@ -4,7 +4,7 @@ import {
   getInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, adjustInventoryAssetQuantity,
   getInventoryDashboard, getInventorySuppliers, createInventorySupplier,
   updateInventorySupplier, setInventorySupplierStatus, getInventoryPurchases,
-  createInventoryPurchase, decideInventoryPurchase, receiveInventoryPurchase, getInventoryIssuances,
+  createInventoryPurchase, receiveInventoryPurchase, getInventoryIssuances,
   issueInventory, adjustInventoryStock, getInventoryAssets, registerInventoryAsset,
   updateInventoryAsset, getInventoryAssetHistory, getInventoryMaintenance,
   createInventoryMaintenance, completeInventoryMaintenance, getInventoryRequests,
@@ -13,7 +13,6 @@ import {
   getInventoryMovements, getInventoryRequestCatalogue, getInventoryReport,
   getInventoryStaff,
 } from '../api/inventory';
-import { getKitchenItems } from '../api/operations';
 import { getUsers } from '../api/users';
 
 const managerRoles = ['admin', 'inventory', 'store', 'storekeeper'];
@@ -70,7 +69,6 @@ function Inventory() {
   const [users, setUsers] = useState([]);
   const [staffDirectory, setStaffDirectory] = useState([]);
   const [purchases, setPurchases] = useState([]);
-  const [kitchenPlans, setKitchenPlans] = useState([]);
   const [issuances, setIssuances] = useState([]);
   const [assets, setAssets] = useState([]);
   const [maintenance, setMaintenance] = useState([]);
@@ -93,7 +91,7 @@ function Inventory() {
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [purchaseForm, setPurchaseForm] = useState({
     supplier_id: '', purchase_reference: '', purchase_date: new Date().toISOString().slice(0, 10),
-    invoice_number: '', notes: '', items: [{ inventory_id: '', kitchen_item_plan_id: '', quantity_ordered: '', unit_price: '', expiry_date: '' }],
+    invoice_number: '', notes: '', items: [{ inventory_id: '', quantity_ordered: '', unit_price: '', expiry_date: '' }],
   });
   const [receivingPurchaseId, setReceivingPurchaseId] = useState('');
   const [deliveryForm, setDeliveryForm] = useState({ delivery_reference: '', notes: '', quantities: {} });
@@ -131,7 +129,7 @@ function Inventory() {
         getInventory(), getInventoryDashboard(), getInventorySuppliers(), getUsers(),
         getInventoryPurchases(), getInventoryIssuances(), getInventoryAssets(),
         getInventoryMaintenance(), getInventoryRequests(), getInventoryStocktakes(), getInventoryMovements(),
-        getInventoryStaff(), getKitchenItems().catch(() => ({ data: [] })),
+        getInventoryStaff(),
       ]);
       setInventory(responses[0].data);
       setRequestCatalogue(responses[0].data.filter((item) => item.item_type !== 'asset' && item.item_status === 'active'));
@@ -146,7 +144,6 @@ function Inventory() {
       setStocktakes(responses[9].data);
       setMovements(responses[10].data);
       setStaffDirectory(responses[11].data);
-      setKitchenPlans(responses[12].data);
     } catch (requestError) {
       setError(errorMessage(requestError, 'Failed to load store data.'));
     } finally {
@@ -239,7 +236,7 @@ function Inventory() {
     }, editingSupplier ? 'Supplier updated.' : 'Supplier registered.');
   };
   const addPurchaseLine = () => setPurchaseForm((previous) => ({
-    ...previous, items: [...previous.items, { inventory_id: '', kitchen_item_plan_id: '', quantity_ordered: '', unit_price: '', expiry_date: '' }],
+    ...previous, items: [...previous.items, { inventory_id: '', quantity_ordered: '', unit_price: '', expiry_date: '' }],
   }));
   const updatePurchaseLine = (index, field, value) => setPurchaseForm((previous) => ({
     ...previous,
@@ -252,7 +249,6 @@ function Inventory() {
         ...purchaseForm,
         items: purchaseForm.items.map((item) => ({
           ...item,
-          kitchen_item_plan_id: item.kitchen_item_plan_id ? Number(item.kitchen_item_plan_id) : null,
           quantity_ordered: Number(item.quantity_ordered),
           unit_price: Number(item.unit_price),
           expiry_date: item.expiry_date || null,
@@ -260,17 +256,9 @@ function Inventory() {
       });
       setPurchaseForm({
         supplier_id: '', purchase_reference: '', purchase_date: new Date().toISOString().slice(0, 10),
-        invoice_number: '', notes: '', items: [{ inventory_id: '', kitchen_item_plan_id: '', quantity_ordered: '', unit_price: '', expiry_date: '' }],
+        invoice_number: '', notes: '', items: [{ inventory_id: '', quantity_ordered: '', unit_price: '', expiry_date: '' }],
       });
-    }, 'Purchase submitted for approval. Stock will change only after approval and delivery.');
-  };
-  const decidePurchase = (purchase, decision) => {
-    const approval_comment = decision === 'rejected'
-      ? window.prompt('Reason for rejecting this purchase?')?.trim()
-      : window.prompt('Approval note (optional):')?.trim() || '';
-    if (decision === 'rejected' && !approval_comment) return;
-    if (!window.confirm(`${decision === 'approved' ? 'Approve' : 'Reject'} purchase ${purchase.purchase_reference}?`)) return;
-    runAction(() => decideInventoryPurchase(purchase.id, decision, approval_comment), `Purchase ${decision}.`);
+    }, 'Purchase order recorded. Stock will change only when delivery is received.');
   };
   const openReceiving = (purchase) => {
     setReceivingPurchaseId(String(purchase.id));
@@ -665,7 +653,6 @@ function Inventory() {
             <h3>Items purchased</h3>
             {purchaseForm.items.map((line, index) => <div className="inventory-form-grid" key={index} style={{ borderTop: '1px solid #e2e8f0', paddingTop: '.6rem', marginBottom: '.5rem' }}>
               <label>Catalogue item *<select required value={line.inventory_id} onChange={(event) => updatePurchaseLine(index, 'inventory_id', event.target.value)}><option value="">Select catalogue item</option>{activeItems.map((item) => <option key={item.id} value={item.id}>{item.item_name} · {item.item_type === 'asset' ? 'Reusable asset' : 'Consumable'}</option>)}</select></label>
-              <label>Kitchen plan link<select value={line.kitchen_item_plan_id} onChange={(event) => updatePurchaseLine(index, 'kitchen_item_plan_id', event.target.value)}><option value="">Not a kitchen plan item</option>{kitchenPlans.filter((plan) => !plan.inventory_id || String(plan.inventory_id) === String(line.inventory_id)).map((plan) => <option key={plan.id} value={plan.id}>{plan.item_name} · {plan.category}</option>)}</select></label>
               <label>Quantity *<input required type="number" min="1" step="1" value={line.quantity_ordered} onChange={(event) => updatePurchaseLine(index, 'quantity_ordered', event.target.value)} /></label>
               <label>Unit price *<input required type="number" min="0" step=".01" value={line.unit_price} onChange={(event) => updatePurchaseLine(index, 'unit_price', event.target.value)} /></label>
               <label>Expiry date<input type="date" value={line.expiry_date} onChange={(event) => updatePurchaseLine(index, 'expiry_date', event.target.value)} /></label>
@@ -677,11 +664,9 @@ function Inventory() {
             {supplierHistoryId && <button className="btn-secondary" onClick={() => setSupplierHistoryId('')}>Clear supplier history filter</button>}
             {purchases.filter((purchase) => !supplierHistoryId || String(purchase.supplier_id) === supplierHistoryId || suppliers.find((supplier) => String(supplier.id) === supplierHistoryId)?.name === purchase.supplier_name).map((purchase) => <article className="data-panel" key={purchase.id} style={{ marginBottom: '.75rem', boxShadow: 'none' }}>
               <div className="inventory-actions" style={{ justifyContent: 'space-between' }}><strong>{purchase.purchase_reference} · {purchase.supplier_name}</strong>{pill(purchase.status)}</div>
-              <p>{shortDate(purchase.purchase_date)} · Invoice {purchase.invoice_number || '—'} · Total {formatMoney(purchase.total_cost)}{purchase.decision_by_name ? ` · Decided by ${purchase.decision_by_name}` : ''}</p>
-              {purchase.approval_comment && <p>{purchase.approval_comment}</p>}
-              <ul>{purchase.items.map((line) => <li key={line.id}>{line.item_name} ({line.item_type === 'asset' ? 'asset' : 'consumable'}){line.kitchen_item_name ? ` · Kitchen plan: ${line.kitchen_item_name}` : ''}: {line.quantity_received}/{line.quantity_ordered} received at {formatMoney(line.unit_price)} / unit</li>)}</ul>
-              {isAdmin && purchase.status === 'pending_approval' && <div className="inventory-actions"><button className="btn-small btn-primary" onClick={() => decidePurchase(purchase, 'approved')}>Approve purchase</button><button className="btn-small btn-delete" onClick={() => decidePurchase(purchase, 'rejected')}>Reject purchase</button></div>}
-              {['approved', 'ordered', 'partially_received'].includes(purchase.status) && <button className="btn-small btn-primary" onClick={() => openReceiving(purchase)}>Record delivery / partial delivery</button>}
+              <p>{shortDate(purchase.purchase_date)} · Invoice {purchase.invoice_number || '—'} · Total {formatMoney(purchase.total_cost)}</p>
+              <ul>{purchase.items.map((line) => <li key={line.id}>{line.item_name} ({line.item_type === 'asset' ? 'asset' : 'consumable'}): {line.quantity_received}/{line.quantity_ordered} received at {formatMoney(line.unit_price)} / unit</li>)}</ul>
+              {purchase.status !== 'received' && purchase.status !== 'cancelled' && <button className="btn-small btn-primary" onClick={() => openReceiving(purchase)}>Record delivery / partial delivery</button>}
               {receivingPurchaseId === String(purchase.id) && <form onSubmit={submitDelivery} style={{ marginTop: '1rem' }}>
                 <label>Delivery reference (unique for retry protection)<input required maxLength="120" value={deliveryForm.delivery_reference} onChange={(event) => setDeliveryForm({ ...deliveryForm, delivery_reference: event.target.value })} /></label>
                 {purchase.items.filter((line) => line.quantity_ordered > line.quantity_received).map((line) => <div key={line.id}><label>{line.item_name} · remaining {line.quantity_ordered - line.quantity_received}<input type="number" min="0" max={line.quantity_ordered - line.quantity_received} step="1" value={deliveryForm.quantities[line.id] || ''} onChange={(event) => setDeliveryForm({ ...deliveryForm, quantities: { ...deliveryForm.quantities, [line.id]: event.target.value } })} /></label>{line.item_type !== 'asset' && <label>Expiry date for this delivery (optional)<input type="date" value={deliveryForm.expiryDates?.[line.id] || ''} onChange={(event) => setDeliveryForm({ ...deliveryForm, expiryDates: { ...deliveryForm.expiryDates, [line.id]: event.target.value } })} /></label>}{line.item_type === 'asset' && <label>Serial numbers (one per received asset, optional)<textarea rows="2" placeholder="One serial number per line" value={deliveryForm.serialNumbers?.[line.id] || ''} onChange={(event) => setDeliveryForm({ ...deliveryForm, serialNumbers: { ...deliveryForm.serialNumbers, [line.id]: event.target.value } })} /></label>}</div>)}
