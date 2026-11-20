@@ -10,6 +10,15 @@ const {
 
 const MODULES = new Set(['tuckshop', 'feeding_marketing']);
 const FREQUENCIES = new Set(['daily', 'weekly', 'fortnightly', 'monthly', 'custom']);
+const FINANCE_AUDIT_TABLES = [
+  'operational_financial_entries', 'feeding_coverage_days', 'feeding_payment_ledger',
+  'feeding_student_accounts', 'feeding_frequency_history',
+  'feeding_terms', 'feeding_calendar_exceptions', 'feeding_class_rates', 'feeding_obligations',
+];
+const INVENTORY_AUDIT_TABLES = [
+  'kitchen_item_plans', 'inventory_purchases', 'inventory_purchase_items',
+  'inventory_purchase_receipts', 'inventory_purchase_receipt_items',
+];
 const text = (value, limit = 500) => typeof value === 'string' ? value.trim().slice(0, limit) : '';
 const positiveInt = (value) => Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
 const optionalPositiveNumber = (value) => value === '' || value === null || value === undefined
@@ -20,6 +29,17 @@ const error = (status, message) => Object.assign(new Error(message), { status })
 const fail = (res, next, caught) => caught.status
   ? res.status(caught.status).json({ message: caught.message })
   : next(caught);
+
+function auditPayload(tableName, value) {
+  if (!value || typeof value !== 'object') return value;
+  const allowedFields = tableName === 'school_payment_receipts'
+    ? ['receipt_number', 'payment_date', 'payment_method', 'reference', 'feeding_amount', 'feeding_academic_year', 'feeding_term', 'received_by']
+    : tableName === 'school_payment_refunds'
+      ? ['component', 'amount', 'reason', 'reference', 'refund_date', 'refunded_by', 'receipt_id']
+      : null;
+  if (!allowedFields) return value;
+  return Object.fromEntries(allowedFields.filter((field) => field in value).map((field) => [field, value[field]]));
+}
 
 function parsePeriod(query) {
   let startDate = query.from || '';
@@ -348,6 +368,83 @@ const deleteFinancialEntry = async (req, res, next) => {
   }
 };
 
+const updateFinancialEntry = async (req, res, next) => {
+  const id = positiveInt(req.params.id);
+  const module = req.params.module;
+  const type = req.body.transaction_type;
+  const date = req.body.transaction_date;
+  const amount = money(req.body.amount);
+  const description = text(req.body.description, 1000);
+  if (!id || !MODULES.has(module) || !['revenue', 'expense'].includes(type)
+      || !toUtcDate(date) || amount === null || amount <= 0 || !description) {
+    return res.status(400).json({ message: 'Choose a register, type, valid date, positive amount, and description.' });
+  }
+  try {
+    const officerOwnEntry = req.user.role === 'feeding_tuckshop_officer';
+    const result = await pool.query(
+      `UPDATE operational_financial_entries
+       SET transaction_type=$1, transaction_date=$2, week_start=$3,
+           academic_year=$4, term=$5, amount=$6, payment_method=$7,
+           category=$8, description=$9, reference=$10, updated_at=NOW()
+       WHERE id=$11 AND school_id=$12 AND module=$13
+         AND ($14::boolean=FALSE OR recorded_by=$15)
+       RETURNING id, module, transaction_type, transaction_date::text, week_start::text,
+                 academic_year, term, amount, payment_method, category, description, reference,
+                 recorded_by, created_at, updated_at`,
+      [type, date, mondayFor(date), text(req.body.academic_year, 40) || null,
+        text(req.body.term, 80) || null, amount, text(req.body.payment_method, 40) || null,
+        text(req.body.category, 100) || null, description, text(req.body.reference, 120) || null,
+        id, req.user.school_id, module, officerOwnEntry, req.user.id]
+    );
+    if (!result.rowCount) throw error(404, 'Register entry not found or not editable.');
+    res.json(result.rows[0]);
+  } catch (caught) {
+    fail(res, next, caught);
+  }
+};
+
+const getOperationsAudit = async (req, res, next) => {
+  try {
+    const [financeRows, inventoryRows] = await Promise.all([
+      pool.query(
+        `SELECT id, actor_id, actor_role, table_name, record_id, action,
+                old_data, new_data, created_at
+         FROM finance_audit_log
+         WHERE school_id=$1 AND (
+           table_name=ANY($2::text[])
+           OR (table_name='school_payment_receipts' AND
+             GREATEST(COALESCE(NULLIF(new_data->>'feeding_amount','')::numeric,0),
+                      COALESCE(NULLIF(old_data->>'feeding_amount','')::numeric,0)) > 0)
+           OR (table_name='school_payment_refunds' AND
+             COALESCE(new_data->>'component',old_data->>'component')='feeding')
+         )
+         ORDER BY created_at DESC LIMIT 200`,
+        [req.user.school_id, FINANCE_AUDIT_TABLES]
+      ),
+      pool.query(
+        `SELECT id, actor_id, actor_role, table_name, record_id, action,
+                old_data, new_data, created_at
+         FROM inventory_audit_log
+         WHERE school_id=$1 AND table_name=ANY($2::text[])
+         ORDER BY created_at DESC LIMIT 200`,
+        [req.user.school_id, INVENTORY_AUDIT_TABLES]
+      ),
+    ]);
+    const entries = [
+      ...financeRows.rows.map((row) => ({
+        ...row,
+        old_data: auditPayload(row.table_name, row.old_data),
+        new_data: auditPayload(row.table_name, row.new_data),
+        source: 'finance',
+      })),
+      ...inventoryRows.rows.map((row) => ({ ...row, source: 'inventory' })),
+    ].sort((left, right) => new Date(right.created_at) - new Date(left.created_at)).slice(0, 200);
+    res.json(entries);
+  } catch (caught) {
+    fail(res, next, caught);
+  }
+};
+
 const exportFinancialRegister = async (req, res, next) => {
   try {
     const { module, period, entries, report } = await fetchFinancialEntries(req.user.school_id, req.query);
@@ -401,6 +498,8 @@ module.exports = {
   exportKitchenItems,
   getFinancialRegister,
   createFinancialEntry,
+  updateFinancialEntry,
   deleteFinancialEntry,
+  getOperationsAudit,
   exportFinancialRegister,
 };

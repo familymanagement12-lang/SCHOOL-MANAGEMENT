@@ -15,9 +15,13 @@ export const getOperationalFinancialRegister = (params = {}) => (
   api.get('/operations/financial-register', { params })
 );
 export const createOperationalFinancialEntry = (data) => api.post('/operations/financial-register', data);
+export const updateOperationalFinancialEntry = (module, id, data) => (
+  api.put(`/operations/financial-register/${module}/${id}`, data)
+);
 export const deleteOperationalFinancialEntry = (module, id) => (
   api.delete(`/operations/financial-register/${module}/${id}`)
 );
+export const getOperationsAudit = () => api.get('/operations/audit');
 export const exportOperationalFinancialRegister = (params = {}) => (
   api.get('/operations/financial-register/export', { params, responseType: 'blob' })
 );

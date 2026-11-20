@@ -32,6 +32,7 @@ In the Render API service, set `CORS_ORIGIN` and `FRONTEND_URL` to the deployed 
 - `npm run db:migrate:fee-overrides-staff-attendance` adds individual fee adjustments and the staff attendance register without removing existing fee or employee data.
 - `npm run db:migrate:accountant-rls` adds the accountant finance role support, finance change audit history, and PostgreSQL row-level policies to finance tables.
 - `npm run db:migrate:feeding` applies the additive compulsory-feeding, rate/calendar, account, receipt, allocation, refund, ledger, and audit schema using a direct (unpooled) database connection.
+- `npm run db:migrate:feeding-officer-audit-edit` adds audit history for feeding account/frequency changes and officer-scoped audit reads for Feeding, Market, and Tuckshop activity.
 - `npm run db:migrate:kitchen-weekly-operations` adds kitchen item plans, weekly tuckshop and feeding/marketing financial registers, and purchase approval metadata. Apply it explicitly to an existing database before deploying this feature; it does not change the completed Lunch Register ledger.
 - `npm run db:migrate:timetable` applies or rechecks the timetable-management migrations independently.
 - `npm run admin:seed` creates the initial administrator; it does not print the password.

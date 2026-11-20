@@ -6,9 +6,11 @@ import {
   deleteOperationalFinancialEntry,
   exportKitchenItems,
   exportOperationalFinancialRegister,
+  getOperationsAudit,
   getKitchenItems,
   getOperationalFinancialRegister,
   setKitchenItemActive,
+  updateOperationalFinancialEntry,
   updateKitchenItem,
 } from '../api/operations';
 import { getInventory, getInventorySuppliers } from '../api/inventory';
@@ -18,6 +20,11 @@ const currentMonth = new Date().toISOString().slice(0, 7);
 const currency = (value) => Number(value || 0).toLocaleString(undefined, { style: 'currency', currency: 'GHS' });
 const dateLabel = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
 const today = () => new Date().toISOString().slice(0, 10);
+const auditSummary = (entry) => {
+  const data = entry.new_data || entry.old_data || {};
+  return data.description || data.item_name || data.purchase_reference || data.receipt_number
+    || data.name || `Record ${entry.record_id}`;
+};
 const emptyKitchenItem = {
   item_name: '', category: '', estimated_quantity: '', expected_monthly_quantity: '', unit: '',
   purchasing_frequency: 'weekly', custom_interval_days: '', estimated_unit_cost: '', supplier_id: '',
@@ -42,9 +49,11 @@ function OperationsRegisters() {
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
   const isOfficer = user?.role === 'feeding_tuckshop_officer';
   const canManageKitchen = ['admin', 'inventory', 'store', 'storekeeper'].includes(user?.role);
+  const canEditKitchen = canManageKitchen || isOfficer;
   const canViewKitchen = ['admin', 'accountant', 'inventory', 'store', 'storekeeper', 'feeding_tuckshop_officer'].includes(user?.role);
   const canManageFinance = ['admin', 'accountant'].includes(user?.role);
   const canWriteFinance = ['admin', 'accountant', 'feeding_tuckshop_officer'].includes(user?.role);
+  const canViewOperationsAudit = ['admin', 'accountant', 'feeding_tuckshop_officer'].includes(user?.role);
   const [section, setSection] = useState(isOfficer ? 'feeding' : 'kitchen');
   const [module, setModule] = useState(isOfficer ? 'feeding_marketing' : 'tuckshop');
   const [periodMode, setPeriodMode] = useState('month');
@@ -64,6 +73,8 @@ function OperationsRegisters() {
   const [editingKitchenItem, setEditingKitchenItem] = useState(null);
   const [financialData, setFinancialData] = useState({ entries: [], report: null });
   const [entryForm, setEntryForm] = useState(emptyEntry);
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [auditRows, setAuditRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -94,6 +105,11 @@ function OperationsRegisters() {
     setFinancialData(response.data);
   };
 
+  const loadAudit = async () => {
+    const response = await getOperationsAudit();
+    setAuditRows(response.data);
+  };
+
   const refresh = async () => {
     setLoading(true);
     setError('');
@@ -103,6 +119,7 @@ function OperationsRegisters() {
       else setKitchenItems([]);
       if (canWriteFinance) requests.push(loadFinancialData());
       else setFinancialData({ entries: [], report: null });
+      if (section === 'audit' && canViewOperationsAudit) requests.push(loadAudit());
       await Promise.all(requests);
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Unable to load the operations registers.');
@@ -111,7 +128,7 @@ function OperationsRegisters() {
     }
   };
 
-  useEffect(() => { refresh(); }, [periodParams, categoryFilter, frequencyFilter, search, module, academicYear, term]);
+  useEffect(() => { refresh(); }, [periodParams, categoryFilter, frequencyFilter, search, module, academicYear, term, section]);
 
   useEffect(() => {
     if (!canManageKitchen) return;
@@ -177,15 +194,36 @@ function OperationsRegisters() {
   const submitEntry = (event) => {
     event.preventDefault();
     run(async () => {
-      await createOperationalFinancialEntry({
+      const payload = {
         ...entryForm,
         module,
         amount: Number(entryForm.amount),
         academic_year: academicYear || entryForm.academic_year,
         term: term || entryForm.term,
-      });
+      };
+      if (editingEntryId) await updateOperationalFinancialEntry(module, editingEntryId, payload);
+      else await createOperationalFinancialEntry(payload);
+      setEditingEntryId(null);
       setEntryForm({ ...emptyEntry, transaction_date: today() });
-    }, 'Daily entry recorded.');
+    }, editingEntryId ? 'Register entry updated.' : 'Daily entry recorded.');
+  };
+
+  const editEntry = (entry) => {
+    setModule(entry.module);
+    setSection(entry.module === 'tuckshop' ? 'tuckshop' : 'feeding');
+    setEditingEntryId(entry.id);
+    setEntryForm({
+      transaction_type: entry.transaction_type,
+      transaction_date: entry.transaction_date,
+      amount: String(entry.amount),
+      payment_method: entry.payment_method || '',
+      category: entry.category || '',
+      description: entry.description || '',
+      reference: entry.reference || '',
+      academic_year: entry.academic_year || '',
+      term: entry.term || '',
+    });
+    window.setTimeout(() => document.getElementById('operational-entry-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
   };
 
   const exportKitchen = async () => {
@@ -238,6 +276,7 @@ function OperationsRegisters() {
         {canViewKitchen && <button type="button" className={section === 'kitchen' ? 'active' : ''} onClick={() => setSection('kitchen')}>Market Stock</button>}
         {(canManageFinance || isOfficer) && <button type="button" className={section === 'tuckshop' ? 'active' : ''} onClick={() => { setSection('tuckshop'); setModule('tuckshop'); }}>Tuckshop & purchases</button>}
         {canWriteFinance && <button type="button" className={section === 'feeding' ? 'active' : ''} onClick={() => { setSection('feeding'); setModule('feeding_marketing'); }}>Feeding & marketing</button>}
+        {canViewOperationsAudit && <button type="button" className={section === 'audit' ? 'active' : ''} onClick={() => setSection('audit')}>Audit trail</button>}
       </div>
 
       <section className="data-panel operations-period">
@@ -295,13 +334,13 @@ function OperationsRegisters() {
                 <td>{currency(item.actual_unit_cost)}</td>
                 <td>{currency(item.actual_variance)}{item.actual_variance_percent !== null && <div>{item.actual_variance_percent}%</div>}</td>
                 <td>{item.pending_approval_quantity} pending - {item.approved_purchase_quantity} approved<div>{item.approved_outstanding_quantity} to receive</div></td>
-                {canManageKitchen && <td><div className="inventory-actions"><button className="btn-small btn-edit" onClick={() => editKitchen(item)}>Edit</button><button className="btn-small btn-secondary" onClick={() => run(() => setKitchenItemActive(item.id, !item.is_active), `Kitchen item ${item.is_active ? 'deactivated' : 'activated'}.`)}>{item.is_active ? 'Deactivate' : 'Activate'}</button></div></td>}
+                {canEditKitchen && <td><div className="inventory-actions"><button className="btn-small btn-edit" onClick={() => editKitchen(item)}>Edit</button><button className="btn-small btn-secondary" onClick={() => run(() => setKitchenItemActive(item.id, !item.is_active), `Kitchen item ${item.is_active ? 'deactivated' : 'activated'}.`)}>{item.is_active ? 'Deactivate' : 'Activate'}</button></div></td>}
               </tr>)}
             </tbody></table></div>
             {!kitchenItems.length && <p className="empty-state">No kitchen items match this filter.</p>}
           </section>
 
-          {canManageKitchen && <form className="data-panel form-panel" onSubmit={saveKitchen}>
+          {canEditKitchen && <form className="data-panel form-panel" onSubmit={saveKitchen}>
             <div className="panel-heading"><div><p className="eyebrow">Planning only</p><h2>{editingKitchenItem ? 'Edit kitchen item' : 'Add kitchen item'}</h2></div></div>
             <div className="operations-period-grid">
               <label>Item name *<input required maxLength="160" value={kitchenForm.item_name} onChange={(event) => setKitchenForm({ ...kitchenForm, item_name: event.target.value })} /></label>
@@ -312,8 +351,8 @@ function OperationsRegisters() {
               <label>Purchasing frequency *<select value={kitchenForm.purchasing_frequency} onChange={(event) => setKitchenForm({ ...kitchenForm, purchasing_frequency: event.target.value })}>{['daily', 'weekly', 'fortnightly', 'monthly', 'custom'].map((frequency) => <option key={frequency}>{frequency}</option>)}</select></label>
               {kitchenForm.purchasing_frequency === 'custom' && <label>Custom interval in days *<input required type="number" min="1" max="365" step="1" value={kitchenForm.custom_interval_days} onChange={(event) => setKitchenForm({ ...kitchenForm, custom_interval_days: event.target.value })} /></label>}
               <label>Estimated unit cost *<input required type="number" min="0" step="0.01" value={kitchenForm.estimated_unit_cost} onChange={(event) => setKitchenForm({ ...kitchenForm, estimated_unit_cost: event.target.value })} /></label>
-              <label>Supplier<select value={kitchenForm.supplier_id} onChange={(event) => setKitchenForm({ ...kitchenForm, supplier_id: event.target.value })}><option value="">Not specified</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
-              <label>Inventory item link<select value={kitchenForm.inventory_id} onChange={(event) => setKitchenForm({ ...kitchenForm, inventory_id: event.target.value })}><option value="">Link when purchasing</option>{inventory.map((item) => <option key={item.id} value={item.id}>{item.item_name} - {item.unit}</option>)}</select></label>
+              {!isOfficer && <label>Supplier<select value={kitchenForm.supplier_id} onChange={(event) => setKitchenForm({ ...kitchenForm, supplier_id: event.target.value })}><option value="">Not specified</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>}
+              {!isOfficer && <label>Inventory item link<select value={kitchenForm.inventory_id} onChange={(event) => setKitchenForm({ ...kitchenForm, inventory_id: event.target.value })}><option value="">Link when purchasing</option>{inventory.map((item) => <option key={item.id} value={item.id}>{item.item_name} - {item.unit}</option>)}</select></label>}
               <label className="operations-notes">Notes<input maxLength="1000" value={kitchenForm.notes} onChange={(event) => setKitchenForm({ ...kitchenForm, notes: event.target.value })} /></label>
             </div>
             <div className="inventory-actions"><button className="btn-primary" disabled={saving}>{editingKitchenItem ? 'Save plan' : 'Add item'}</button>{editingKitchenItem && <button type="button" className="btn-secondary" onClick={() => { setEditingKitchenItem(null); setKitchenForm(emptyKitchenItem); }}>Cancel</button>}</div>
@@ -321,7 +360,7 @@ function OperationsRegisters() {
           </form>}
         </>}
 
-        {section !== 'kitchen' && <>
+        {['tuckshop', 'feeding'].includes(section) && <>
           <div className="operations-register-heading">
             <div><p className="eyebrow">{module === 'tuckshop' ? 'Tuckshop & Purchases' : 'Feeding & Marketing'}</p><h2>{module === 'tuckshop' ? 'Weekly income and expenses' : 'Weekly revenue and expense register'}</h2></div>
             <div className="inventory-actions"><button className="btn-secondary" onClick={exportFinance}>Export Excel</button><button className="btn-secondary" onClick={() => window.print()}>Print</button></div>
@@ -354,8 +393,8 @@ function OperationsRegisters() {
             {!weeks.length && <p className="empty-state">No weeks in this period.</p>}
           </section>
 
-          {canWriteFinance && <form className="data-panel form-panel" onSubmit={submitEntry}>
-            <div className="panel-heading"><div><p className="eyebrow">Daily records - multiple entries per date</p><h2>Record revenue or expense</h2></div></div>
+          {canWriteFinance && <form id="operational-entry-form" className="data-panel form-panel" onSubmit={submitEntry}>
+            <div className="panel-heading"><div><p className="eyebrow">Daily records - multiple entries per date</p><h2>{editingEntryId ? 'Edit daily entry' : 'Record revenue or expense'}</h2></div></div>
             <div className="operations-period-grid">
               <label>Type *<select value={entryForm.transaction_type} onChange={(event) => setEntryForm({ ...entryForm, transaction_type: event.target.value })}><option value="revenue">Revenue</option><option value="expense">Expense</option></select></label>
               <label>Date *<input required type="date" value={entryForm.transaction_date} onChange={(event) => setEntryForm({ ...entryForm, transaction_date: event.target.value })} /></label>
@@ -367,19 +406,44 @@ function OperationsRegisters() {
               {!academicYear && <label>Academic year<input maxLength="40" value={entryForm.academic_year} onChange={(event) => setEntryForm({ ...entryForm, academic_year: event.target.value })} placeholder="e.g. 2026/2027" /></label>}
               {!term && <label>Term<input maxLength="80" value={entryForm.term} onChange={(event) => setEntryForm({ ...entryForm, term: event.target.value })} placeholder="e.g. First Term" /></label>}
             </div>
-            <button className="btn-primary" disabled={saving}>Record entry</button>
+            <div className="inventory-actions"><button className="btn-primary" disabled={saving}>{editingEntryId ? 'Save changes' : 'Record entry'}</button>{editingEntryId && <button type="button" className="btn-secondary" onClick={() => { setEditingEntryId(null); setEntryForm({ ...emptyEntry, transaction_date: today() }); }}>Cancel edit</button>}</div>
           </form>}
 
           <section className="data-panel">
             <div className="panel-heading"><div><p className="eyebrow">Descriptions retained</p><h2>Daily detail - {entries.length} records</h2></div></div>
-            <div className="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Description</th><th>Category</th><th>Method / reference</th><th>Recorded by</th>{canManageFinance && <th />}</tr></thead><tbody>
-              {entries.map((entry) => <tr key={entry.id}><td>{dateLabel(entry.transaction_date)}</td><td>{entry.transaction_type}</td><td>{currency(entry.amount)}</td><td>{entry.description}</td><td>{entry.category || '-'}</td><td>{entry.payment_method || '-'}{entry.reference && <div>{entry.reference}</div>}</td><td>{entry.recorded_by_name || '-'}</td>{canManageFinance && <td><button className="btn-small btn-delete" onClick={() => {
-                if (window.confirm('Delete this register entry?')) run(() => deleteOperationalFinancialEntry(module, entry.id), 'Register entry deleted.');
-              }}>Delete</button></td>}</tr>)}
+            <div className="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Description</th><th>Category</th><th>Method / reference</th><th>Recorded by</th>{(canManageFinance || isOfficer) && <th />}</tr></thead><tbody>
+              {entries.map((entry) => {
+                const canEditEntry = canManageFinance || (isOfficer && Number(entry.recorded_by) === Number(user?.id));
+                return <tr key={entry.id}><td>{dateLabel(entry.transaction_date)}</td><td>{entry.transaction_type}</td><td>{currency(entry.amount)}</td><td>{entry.description}</td><td>{entry.category || '-'}</td><td>{entry.payment_method || '-'}{entry.reference && <div>{entry.reference}</div>}</td><td>{entry.recorded_by_name || '-'}</td>{(canManageFinance || isOfficer) && <td><div className="inventory-actions">
+                  {canEditEntry && <button className="btn-small btn-edit" onClick={() => editEntry(entry)}>Edit</button>}
+                  {canManageFinance && <button className="btn-small btn-delete" onClick={() => {
+                    if (window.confirm('Delete this register entry?')) run(() => deleteOperationalFinancialEntry(module, entry.id), 'Register entry deleted.');
+                  }}>Delete</button>}
+                </div></td>}</tr>;
+              })}
             </tbody></table></div>
             {!entries.length && <p className="empty-state">No daily entries recorded for this period.</p>}
           </section>
         </>}
+
+        {section === 'audit' && canViewOperationsAudit && <section className="data-panel">
+          <div className="panel-heading">
+            <div><p className="eyebrow">Feeding, Market, and Tuckshop</p><h2>Audit trail</h2></div>
+            <button type="button" className="btn-secondary" onClick={loadAudit}>Refresh audit</button>
+          </div>
+          <div className="table-wrap"><table><thead><tr><th>Changed</th><th>Area</th><th>Record</th><th>Action</th><th>Actor</th><th>Summary</th><th>Details</th></tr></thead><tbody>
+            {auditRows.map((entry) => <tr key={`${entry.source}-${entry.id}`}>
+              <td>{new Date(entry.created_at).toLocaleString()}</td>
+              <td>{entry.source === 'inventory' ? 'Market / purchasing' : 'Feeding / weekly register'}</td>
+              <td>{entry.table_name.replaceAll('_', ' ')} #{entry.record_id}</td>
+              <td>{entry.action}</td>
+              <td>{entry.actor_role} #{entry.actor_id || '-'}</td>
+              <td>{auditSummary(entry)}</td>
+              <td><details><summary>View changes</summary><pre className="operations-audit-json">{JSON.stringify({ before: entry.old_data, after: entry.new_data }, null, 2)}</pre></details></td>
+            </tr>)}
+          </tbody></table></div>
+          {!auditRows.length && <p className="empty-state">No audited changes in these registers yet.</p>}
+        </section>}
       </>}
     </div>
   );
