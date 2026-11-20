@@ -225,8 +225,8 @@ function OperationsRegisters() {
     <div className="page module-page operations-registers">
       <section className="module-hero">
         <div>
-          <p className="eyebrow">Operations - Market & Finance</p>
-          <h1>Kitchen & weekly registers</h1>
+          <p className="eyebrow">Market Stock - Kitchen Register</p>
+          <h1>Market Stock, Tuckshop & Feeding</h1>
           <p>Plan kitchen purchasing and record daily tuckshop or feeding-marketing activity.</p>
         </div>
       </section>
@@ -235,7 +235,7 @@ function OperationsRegisters() {
       {notice && <div className="success" role="status">{notice}</div>}
 
       <div className="inventory-tabs" role="tablist" aria-label="Operations registers">
-        {canViewKitchen && <button type="button" className={section === 'kitchen' ? 'active' : ''} onClick={() => setSection('kitchen')}>Kitchen plan</button>}
+        {canViewKitchen && <button type="button" className={section === 'kitchen' ? 'active' : ''} onClick={() => setSection('kitchen')}>Market Stock</button>}
         {(canManageFinance || isOfficer) && <button type="button" className={section === 'tuckshop' ? 'active' : ''} onClick={() => { setSection('tuckshop'); setModule('tuckshop'); }}>Tuckshop & purchases</button>}
         {canWriteFinance && <button type="button" className={section === 'feeding' ? 'active' : ''} onClick={() => { setSection('feeding'); setModule('feeding_marketing'); }}>Feeding & marketing</button>}
       </div>
