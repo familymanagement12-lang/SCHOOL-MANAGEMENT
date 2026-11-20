@@ -32,6 +32,7 @@ In the Render API service, set `CORS_ORIGIN` and `FRONTEND_URL` to the deployed 
 - `npm run db:migrate:fee-overrides-staff-attendance` adds individual fee adjustments and the staff attendance register without removing existing fee or employee data.
 - `npm run db:migrate:accountant-rls` adds the accountant finance role support, finance change audit history, and PostgreSQL row-level policies to finance tables.
 - `npm run db:migrate:feeding` applies the additive compulsory-feeding, rate/calendar, account, receipt, allocation, refund, ledger, and audit schema using a direct (unpooled) database connection.
+- `npm run db:migrate:kitchen-weekly-operations` adds kitchen item plans, weekly tuckshop and feeding/marketing financial registers, and purchase approval metadata. Apply it explicitly to an existing database before deploying this feature; it does not change the completed Lunch Register ledger.
 - `npm run db:migrate:timetable` applies or rechecks the timetable-management migrations independently.
 - `npm run admin:seed` creates the initial administrator; it does not print the password.
 - `npm run dev:backend` starts the API.
@@ -51,6 +52,11 @@ The existing inventory catalogue is extended in place; the additive `npm run db:
 Administrators, inventory users, and the separate `storekeeper` role can access the store dashboard, catalogue, suppliers, purchases, issuance, asset management, maintenance, stocktakes, alerts, reports, and transaction history. Only administrators can create accounts or dispose of assets. Teachers can submit and track their own departmental requests; approval and fulfilment are restricted to store roles on the backend. Create inventory or storekeeper accounts in Accounts & Roles. The legacy `store` role remains an alias for `inventory`.
 
 Item and asset barcode labels can be printed. USB barcode scanners that type into the focused search field work in keyboard-wedge mode; configure the scanner to send Enter after each scan. Teachers can still view only inventory assigned to their account.
+
+## Kitchen and weekly operations
+The `/operations` workspace reuses the inventory catalogue, suppliers, purchase receipts, stock movements, and audit log. Kitchen plans are estimates only: they do not create stock or expenses. Link a planned item to a purchase line to compare its estimates with received quantities and actual receipt costs. New inventory purchases require administrator approval before delivery can be received; existing orders are preserved as approved.
+
+Administrators, accountants, and feeding/tuckshop officers can record weekly Tuckshop & Purchases and Feeding & Marketing entries; officers may also view kitchen plans. Both registers group entries into calendar weeks, allow multiple revenue or expense entries per date, retain expense descriptions, support date/month/term filters, and export Excel or print. These entries are kept separate from POS sales, school-fee transactions, and the completed Lunch Register allocations. This checkout has a student workbook uploader, but no dedicated Tuckshop POS or operations workbook-import centre was found during the audit.
 
 ## Fees and staff attendance
 When applying a fee structure to selected classes, administrators and accountants can set a different total fee for an individual student and must record a reason for each difference. Students without an adjustment receive the normal class total. The adjustment and reason are retained with the fee record and finance audit history.

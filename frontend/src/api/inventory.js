@@ -14,6 +14,9 @@ export const updateInventorySupplier = (id, data) => api.put(`/inventory/supplie
 export const setInventorySupplierStatus = (id, is_active) => api.patch(`/inventory/suppliers/${id}/status`, { is_active });
 export const getInventoryPurchases = () => api.get('/inventory/purchases');
 export const createInventoryPurchase = (data) => api.post('/inventory/purchases', data);
+export const decideInventoryPurchase = (id, decision, approval_comment = '') => (
+	api.patch(`/inventory/purchases/${id}/decision`, { decision, approval_comment })
+);
 export const receiveInventoryPurchase = (id, data) => api.post(`/inventory/purchases/${id}/receive`, data);
 export const getInventoryIssuances = () => api.get('/inventory/issuances');
 export const issueInventory = (data) => api.post('/inventory/issuances', data);

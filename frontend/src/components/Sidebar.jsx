@@ -29,6 +29,7 @@ const sections = [
       { path: '/inventory', label: 'School store', icon: Boxes, roles: ['admin', 'inventory', 'store', 'storekeeper', 'teacher'] },
       { path: '/fees', label: 'Fees', icon: WalletCards, roles: ['admin', 'accountant'] },
       { path: '/feeding', label: 'Lunch & Feeding', icon: WalletCards, roles: ['admin', 'accountant', 'feeding_tuckshop_officer'] },
+      { path: '/operations', label: 'Kitchen & weekly registers', icon: CalendarDays, roles: ['admin', 'accountant', 'inventory', 'store', 'storekeeper', 'feeding_tuckshop_officer'] },
       { path: '/transactions', label: 'Finance', icon: CircleDollarSign, roles: ['admin', 'accountant'] },
       { path: '/finance-audit', label: 'Finance audit trail', icon: FileBarChart2, roles: ['admin', 'accountant'] },
       { path: '/employees', label: 'Staff', icon: Users, roles: ['admin'] },

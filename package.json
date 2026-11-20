@@ -15,6 +15,7 @@
     "db:migrate:school-store": "node scripts/migrate_school_store.js",
     "db:migrate:fee-overrides-staff-attendance": "node scripts/migrate_fee_overrides_staff_attendance.js",
     "db:migrate:ai-assistant": "node scripts/migrate_ai_assistant.js",
+    "db:migrate:kitchen-weekly-operations": "node scripts/migrate_kitchen_weekly_operations.js",
     "db:migrate:accountant-rls": "node scripts/migrate_accountant_rls_audit.js",
     "db:migrate:feeding": "node scripts/migrate_compulsory_feeding.js",
     "db:migrate:timetable": "node scripts/migrate_timetable.js",

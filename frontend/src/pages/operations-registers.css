@@ -1,0 +1,136 @@
+.operations-registers {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.operations-registers .module-hero {
+  color: #fff;
+  background: linear-gradient(120deg, #155e63 0%, #126d7c 58%, #b45335 100%);
+}
+
+.operations-registers .module-hero .eyebrow,
+.operations-registers .module-hero p:not(.eyebrow) {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.operations-registers .inventory-tabs {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.3rem 0;
+}
+
+.operations-registers .inventory-tabs button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text-main);
+  padding: 0.65rem 0.9rem;
+  font-weight: 650;
+}
+
+.operations-registers .inventory-tabs button.active {
+  border-color: #155e63;
+  background: #155e63;
+  color: #fff;
+}
+
+.operations-period-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 0.85rem;
+}
+
+.operations-period-grid label,
+.operations-registers .inventory-actions label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.operations-registers .inventory-actions {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0.65rem 0;
+}
+
+.operations-period-grid .operations-notes {
+  grid-column: 1 / -1;
+}
+
+.operations-register-heading,
+.operations-registers .panel-heading {
+  gap: 1rem;
+}
+
+.operations-register-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.operations-register-heading h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.operations-register-heading .eyebrow {
+  margin-bottom: 0.25rem;
+}
+
+.operations-registers .data-panel {
+  border-radius: 8px;
+}
+
+.operations-registers .weekly-register-table {
+  min-width: 1050px;
+}
+
+.operations-registers .weekly-register-table tbody tr:not(.weekly-register-total) {
+  cursor: pointer;
+}
+
+.operations-registers .weekly-register-table tbody tr:not(.weekly-register-total):hover {
+  background: #eff8f5;
+}
+
+.operations-registers .register-expense {
+  margin-top: 0.25rem;
+  color: #a3452c;
+}
+
+.operations-registers .weekly-register-total th {
+  color: #153d3f;
+  background: #e8f2ed;
+}
+
+@media (max-width: 700px) {
+  .operations-registers .panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .operations-registers .operations-period-grid .operations-notes {
+    grid-column: auto;
+  }
+}
+
+@media print {
+  .operations-registers .inventory-tabs,
+  .operations-registers .operations-period,
+  .operations-registers form,
+  .operations-registers button,
+  .operations-registers a {
+    display: none !important;
+  }
+
+  .operations-registers .data-panel {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+}
