@@ -72,7 +72,9 @@ function Feeding() {
   const [paymentStudent, setPaymentStudent] = useState(null);
   const paymentKey = useRef(makeRequestKey());
   const isAdmin = user?.role === 'admin';
-  const canSeeAccounts = ['admin', 'accountant'].includes(user?.role);
+  const isFeedingOfficer = user?.role === 'feeding_tuckshop_officer';
+  const canSeeAccounts = ['admin', 'accountant', 'feeding_tuckshop_officer'].includes(user?.role);
+  const canSeeCalendarRates = ['admin', 'accountant', 'feeding_tuckshop_officer'].includes(user?.role);
   const canRecordPayment = ['admin', 'accountant', 'feeding_tuckshop_officer'].includes(user?.role);
 
   const [termForm, setTermForm] = useState({
@@ -389,7 +391,7 @@ function Feeding() {
           {[
             ['register', 'Daily register'],
             ...(canSeeAccounts ? [['accounts', 'Student accounts']] : []),
-            ...(isAdmin ? [['configuration', 'Rates & calendar']] : []),
+            ...(canSeeCalendarRates ? [['configuration', 'Rates & calendar']] : []),
             ...(canSeeAccounts ? [['reports', 'Reports']] : []),
           ].map(([value, label]) => (
             <button key={value} className={tab === value ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab(value)}>{label}</button>
@@ -489,9 +491,13 @@ function Feeding() {
             </div>
             <div className="toolbar">
               <span>Payment frequency</span>
-              <select value={account.student.payment_frequency} onChange={(event) => changeFrequency(event.target.value)}>
-                {Object.entries(frequencyNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
+              {isAdmin || canSeeAccounts && user?.role === 'accountant' ? (
+                <select value={account.student.payment_frequency} onChange={(event) => changeFrequency(event.target.value)}>
+                  {Object.entries(frequencyNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              ) : (
+                <strong>{frequencyNames[account.student.payment_frequency] || account.student.payment_frequency}</strong>
+              )}
               <span>{account.term ? `${account.term.academic_year} · ${account.term.term}` : account.configuration_message}</span>
             </div>
             {account.unconfigured_feeding_days > 0 && <div className="error">Rates are missing for {account.unconfigured_feeding_days} scheduled day(s).</div>}
@@ -510,11 +516,11 @@ function Feeding() {
             </table></div>
             <h2>Payment history</h2>
             <div className="table-wrap"><table>
-              <thead><tr><th>Date</th><th>Receipt</th><th>School fees</th><th>Feeding</th><th>Total</th><th>Refunded</th><th>Reference</th></tr></thead>
+              <thead><tr><th>Date</th><th>Receipt</th>{isFeedingOfficer ? null : <><th>School fees</th><th>Total</th></>}<th>Feeding</th><th>Refunded</th><th>Reference</th></tr></thead>
               <tbody>{account.payment_history.map((payment) => (
                 <tr key={payment.id}><td>{payment.payment_date}</td><td>{payment.receipt_number}</td>
-                  <td>{formatMoney(payment.school_fee_amount)}</td><td>{formatMoney(payment.feeding_amount)}</td>
-                  <td>{formatMoney(payment.amount_total)}</td><td>{formatMoney(payment.refunded_amount)}</td><td>{payment.reference || '-'}</td></tr>
+                  {isFeedingOfficer ? null : <><td>{formatMoney(payment.school_fee_amount)}</td><td>{formatMoney(payment.amount_total)}</td></>}
+                  <td>{formatMoney(payment.feeding_amount)}</td><td>{formatMoney(payment.refunded_amount)}</td><td>{payment.reference || '-'}</td></tr>
               ))}</tbody>
             </table></div>
             <h2>Payment frequency history</h2>
@@ -522,10 +528,10 @@ function Feeding() {
           </>}
         </section>}
 
-        {tab === 'configuration' && isAdmin && <div className="split-layout">
+        {tab === 'configuration' && canSeeCalendarRates && <div className="split-layout">
           <section className="data-panel">
             <h2>Feeding terms and calendar</h2>
-            <form className="form-panel" onSubmit={submitTerm}>
+            {isAdmin && <form className="form-panel" onSubmit={submitTerm}>
               <label>Academic year<input value={termForm.academic_year} onChange={(event) => setTermForm({ ...termForm, academic_year: event.target.value })} required /></label>
               <label>Term<input value={termForm.term} onChange={(event) => setTermForm({ ...termForm, term: event.target.value })} required /></label>
               <label>Start date<input type="date" value={termForm.start_date} onChange={(event) => setTermForm({ ...termForm, start_date: event.target.value })} required /></label>
@@ -536,7 +542,7 @@ function Feeding() {
                 ))}
               </fieldset>
               <button className="btn-primary" disabled={busy}>Create term</button>
-            </form>
+            </form>}
             <div className="table-wrap"><table>
               <thead><tr><th>Academic year</th><th>Term</th><th>Dates</th><th>Weekdays</th><th>Approved exceptions</th></tr></thead>
               <tbody>{terms.map((term) => <tr key={term.id}><td>{term.academic_year}</td><td>{term.term}</td>
@@ -545,7 +551,7 @@ function Feeding() {
                 <td>{term.exceptions.map((exception) => `${exception.name} (${exception.event_type}: ${exception.start_date} - ${exception.end_date})`).join('; ') || '-'}</td></tr>)}</tbody>
             </table></div>
             <h3>Approved holidays, vacations, and school days</h3>
-            <form className="form-panel" onSubmit={submitException}>
+            {isAdmin && <form className="form-panel" onSubmit={submitException}>
               <label>Term<select value={exceptionForm.term_id} onChange={(event) => setExceptionForm({ ...exceptionForm, term_id: event.target.value })} required>
                 <option value="">Choose term</option>{terms.map((term) => <option key={term.id} value={term.id}>{term.academic_year} · {term.term}</option>)}
               </select></label>
@@ -559,13 +565,13 @@ function Feeding() {
               <label>Start date<input type="date" value={exceptionForm.start_date} onChange={(event) => setExceptionForm({ ...exceptionForm, start_date: event.target.value })} required /></label>
               <label>End date<input type="date" value={exceptionForm.end_date} onChange={(event) => setExceptionForm({ ...exceptionForm, end_date: event.target.value })} required /></label>
               <button className="btn-primary" disabled={busy}>Save calendar exception</button>
-            </form>
+            </form>}
           </section>
 
           <section className="data-panel">
             <h2>Class feeding rates</h2>
             <p>Rates are daily amounts. Rate changes are effective-dated; past obligations remain unchanged.</p>
-            <form className="form-panel" onSubmit={submitRate}>
+            {isAdmin && <form className="form-panel" onSubmit={submitRate}>
               <label>Class<select value={rateForm.class_id} onChange={(event) => setRateForm({ ...rateForm, class_id: event.target.value })} required>
                 <option value="">Choose class</option>{classes.map((classItem) => <option key={classItem.id} value={classItem.id}>{classItem.name}</option>)}
               </select></label>
@@ -578,7 +584,7 @@ function Feeding() {
               <label>Daily rate<input type="number" min="0.01" step="0.01" value={rateForm.daily_rate} onChange={(event) => setRateForm({ ...rateForm, daily_rate: event.target.value })} required /></label>
               <label>Effective date<input type="date" value={rateForm.effective_date} onChange={(event) => setRateForm({ ...rateForm, effective_date: event.target.value })} required /></label>
               <button className="btn-primary" disabled={busy}>Add rate</button>
-            </form>
+            </form>}
             <div className="table-wrap"><table>
               <thead><tr><th>Class</th><th>Term</th><th>Daily rate</th><th>Effective</th><th>Changed by</th></tr></thead>
               <tbody>{rates.map((rate) => <tr key={rate.id}><td>{rate.class_name}</td>
