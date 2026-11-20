@@ -50,12 +50,14 @@ function Feeding() {
   const [tab, setTab] = useState(searchParams.get('student_id') ? 'accounts' : 'register');
   const [classes, setClasses] = useState([]);
   const [terms, setTerms] = useState([]);
+  const [termsLoaded, setTermsLoaded] = useState(false);
   const [rates, setRates] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(searchParams.get('student_id') || '');
   const [account, setAccount] = useState(null);
   const [register, setRegister] = useState(null);
   const [registerDate, setRegisterDate] = useState(today());
+  const [registerTermId, setRegisterTermId] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [search, setSearch] = useState('');
   const [reportType, setReportType] = useState('daily');
@@ -107,6 +109,7 @@ function Feeding() {
       .then(([classResponse, termResponse]) => {
         setClasses(classResponse.data);
         setTerms(termResponse.data);
+        setTermsLoaded(true);
         if (termResponse.data[0]) {
           setRateForm((current) => ({
             ...current,
@@ -116,7 +119,10 @@ function Feeding() {
           setExceptionForm((current) => ({ ...current, term_id: String(termResponse.data[0].id) }));
         }
       })
-      .catch((requestError) => setError(requestError.response?.data?.message || 'Unable to load feeding setup.'));
+      .catch((requestError) => {
+        setTermsLoaded(true);
+        setError(requestError.response?.data?.message || 'Unable to load feeding setup.');
+      });
     if (isAdmin || canSeeAccounts) {
       getFeedingRates()
         .then((response) => setRates(response.data))
@@ -140,10 +146,18 @@ function Feeding() {
 
   const refreshRegister = async () => {
     setError('');
+    if (!termsLoaded) return;
+    const coveringTerm = coveringTerms.find((term) => String(term.id) === registerTermId);
+    if (!coveringTerm) {
+      setRegister(null);
+      return;
+    }
     try {
       const response = await getFeedingRegister({
         date: registerDate,
         class_id: classFilter || undefined,
+        academic_year: coveringTerm.academic_year,
+        term: coveringTerm.term,
       });
       setRegister(response.data);
     } catch (requestError) {
@@ -151,9 +165,19 @@ function Feeding() {
     }
   };
 
+  const coveringTerms = useMemo(() => terms.filter((term) => (
+    term.start_date <= registerDate && term.end_date >= registerDate
+  )), [terms, registerDate]);
+
+  useEffect(() => {
+    if (!coveringTerms.some((term) => String(term.id) === registerTermId)) {
+      setRegisterTermId(String(coveringTerms[0]?.id || ''));
+    }
+  }, [coveringTerms, registerTermId]);
+
   useEffect(() => {
     refreshRegister();
-  }, [registerDate, classFilter]);
+  }, [registerDate, registerTermId, classFilter, termsLoaded]);
 
   const loadAccounts = async () => {
     if (!canSeeAccounts) return;
@@ -180,6 +204,7 @@ function Feeding() {
       getFeedingRates(),
     ]);
     setTerms(termResponse.data);
+    setTermsLoaded(true);
     setRates(rateResponse.data);
   };
 
@@ -192,6 +217,7 @@ function Feeding() {
       await createFeedingTerm(termForm);
       await refreshSetup();
       setNotice('Feeding term and scheduled weekdays saved.');
+      if (termForm.start_date <= registerDate && termForm.end_date >= registerDate) setTab('register');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Unable to save feeding term.');
     } finally {
@@ -374,6 +400,18 @@ function Feeding() {
           <section className="data-panel">
             <div className="toolbar">
               <label>Date <input type="date" value={registerDate} onChange={(event) => setRegisterDate(event.target.value)} /></label>
+              <label>Feeding term
+                <select
+                  value={registerTermId}
+                  disabled={!coveringTerms.length}
+                  onChange={(event) => setRegisterTermId(event.target.value)}
+                >
+                  <option value="">Select a term covering this date</option>
+                  {coveringTerms.map((term) => (
+                    <option key={term.id} value={term.id}>{term.academic_year} · {term.term}</option>
+                  ))}
+                </select>
+              </label>
               <label>Class
                 <select value={classFilter} onChange={(event) => setClassFilter(event.target.value)}>
                   <option value="">All classes</option>
@@ -383,6 +421,16 @@ function Feeding() {
               <button className="btn-secondary" onClick={refreshRegister}>Refresh</button>
               {register && <span>{register.academic_year} · {register.term}</span>}
             </div>
+            {termsLoaded && !coveringTerms.length && isAdmin && <div className="error" role="alert">
+              No feeding term covers {registerDate}.
+              <button type="button" className="btn-secondary" onClick={() => {
+                setTermForm((current) => ({ ...current, start_date: registerDate, end_date: registerDate }));
+                setTab('configuration');
+              }}>Configure a term for this date</button>
+            </div>}
+            {termsLoaded && !coveringTerms.length && !isAdmin && <div className="error" role="alert">
+              No feeding term covers {registerDate}. Ask an administrator to configure a term for this date.
+            </div>}
             {register?.unconfigured_feeding_days > 0 && (
               <div className="error">{register.unconfigured_feeding_days} scheduled feeding day(s) are missing a class rate.</div>
             )}
