@@ -19,7 +19,7 @@ router.get('/financial-register/export', authorize(financeRoles), operations.exp
 router.get('/financial-register', authorize(financeRoles), operations.getFinancialRegister);
 router.post('/financial-register', authorize(financeRoles), operations.createFinancialEntry);
 router.put('/financial-register/:module/:id', authorize(financeRoles), operations.updateFinancialEntry);
-router.delete('/financial-register/:module/:id', authorize(['admin', 'accountant']), operations.deleteFinancialEntry);
+router.delete('/financial-register/:module/:id', authorize(['admin', 'accountant', 'feeding_tuckshop_officer']), operations.deleteFinancialEntry);
 router.get('/audit', authorize(['admin', 'accountant', 'feeding_tuckshop_officer']), operations.getOperationsAudit);
 
 module.exports = router;

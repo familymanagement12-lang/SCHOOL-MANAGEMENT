@@ -699,7 +699,7 @@ const adjustAssetQuantity = async (req, res, next) => {
       || reason.length < 5 || !key || !['missing', 'disposed'].includes(eventType)) {
     return res.status(400).json({ message: 'Choose a valid target quantity, adjustment reason, and asset outcome.' });
   }
-  if (eventType === 'disposed' && role !== 'admin') {
+  if (eventType === 'disposed' && !['admin', 'feeding_tuckshop_officer'].includes(role)) {
     return res.status(403).json({ message: 'Only administrators may dispose of assets.' });
   }
   const rawAssetIds = req.body.asset_ids;
@@ -826,7 +826,7 @@ const updateAsset = async (req, res, next) => {
   const normalizedCondition = ['new', 'good', 'fair', 'damaged', 'missing', 'disposed'].includes(condition)
     ? condition : null;
   const isDisposal = event_type === 'disposed' || (event_type === 'condition_changed' && normalizedCondition === 'disposed');
-  if (isDisposal && req.user.role !== 'admin') return res.status(403).json({ message: 'Only administrators may dispose of assets.' });
+  if (isDisposal && !['admin', 'feeding_tuckshop_officer'].includes(req.user.role)) return res.status(403).json({ message: 'Only administrators may dispose of assets.' });
   const removesStock = ['disposed', 'missing'].includes(event_type)
     || (event_type === 'condition_changed' && normalizedCondition === 'missing')
     || (event_type === 'condition_changed' && normalizedCondition === 'disposed');

@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.use(authenticate);
 
-const storeRoles = ['admin', 'inventory', 'storekeeper'];
+const storeRoles = ['admin', 'inventory', 'store', 'storekeeper', 'feeding_tuckshop_officer'];
 const requestRoles = ['admin', 'inventory', 'storekeeper', 'teacher'];
 
 router.get('/dashboard', authorize(storeRoles), store.getInventoryDashboard);
@@ -24,7 +24,7 @@ router.patch('/suppliers/:id/status', authorize(storeRoles), store.setSupplierSt
 
 router.get('/purchases', authorize(storeRoles), store.listPurchases);
 router.post('/purchases', authorize(storeRoles), store.createPurchase);
-router.patch('/purchases/:id/decision', authorize(['admin']), store.decidePurchase);
+router.patch('/purchases/:id/decision', authorize(['admin', 'feeding_tuckshop_officer']), store.decidePurchase);
 router.post('/purchases/:id/receive', authorize(storeRoles), store.receivePurchaseDelivery);
 
 router.get('/issuances', authorize(storeRoles), store.listIssuances);
@@ -53,6 +53,6 @@ router.post('/stocktakes/:id/reconcile', authorize(storeRoles), store.reconcileS
 router.get('/', authorize(['admin', 'inventory', 'storekeeper', 'teacher']), getInventory);
 router.post('/', authorize(storeRoles), createInventoryItem);
 router.put('/:id', authorize(storeRoles), updateInventoryItem);
-router.delete('/:id', authorize(['admin']), deleteInventoryItem);
+router.delete('/:id', authorize(['admin', 'feeding_tuckshop_officer']), deleteInventoryItem);
 
 module.exports = router;

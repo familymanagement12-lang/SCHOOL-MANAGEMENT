@@ -71,7 +71,7 @@ function Feeding() {
   const [busy, setBusy] = useState(false);
   const [paymentStudent, setPaymentStudent] = useState(null);
   const paymentKey = useRef(makeRequestKey());
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = ['admin', 'feeding_tuckshop_officer'].includes(user?.role);
   const isFeedingOfficer = user?.role === 'feeding_tuckshop_officer';
   const canSeeAccounts = ['admin', 'accountant', 'feeding_tuckshop_officer'].includes(user?.role);
   const canSeeCalendarRates = ['admin', 'accountant', 'feeding_tuckshop_officer'].includes(user?.role);
@@ -491,7 +491,7 @@ function Feeding() {
             </div>
             <div className="toolbar">
               <span>Payment frequency</span>
-              {isAdmin || canSeeAccounts && user?.role === 'accountant' ? (
+              {isAdmin || user?.role === 'accountant' ? (
                 <select value={account.student.payment_frequency} onChange={(event) => changeFrequency(event.target.value)}>
                   {Object.entries(frequencyNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>

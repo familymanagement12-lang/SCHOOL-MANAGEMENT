@@ -16,7 +16,7 @@ import {
 import { getKitchenItems } from '../api/operations';
 import { getUsers } from '../api/users';
 
-const managerRoles = ['admin', 'inventory', 'store', 'storekeeper'];
+const managerRoles = ['admin', 'inventory', 'store', 'storekeeper', 'feeding_tuckshop_officer'];
 const initialItem = {
   item_name: '', item_code: '', barcode: '', category: 'School Store',
   item_type: 'consumable', unit: 'piece', quantity: '0', minimum_stock: '0',
@@ -60,7 +60,7 @@ function Inventory() {
   let user = null;
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
   const canManage = managerRoles.includes(user?.role);
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = ['admin', 'feeding_tuckshop_officer'].includes(user?.role);
   const [tab, setTab] = useState(canManage ? 'dashboard' : 'requests');
   const [inventory, setInventory] = useState([]);
   const [requestCatalogue, setRequestCatalogue] = useState([]);
