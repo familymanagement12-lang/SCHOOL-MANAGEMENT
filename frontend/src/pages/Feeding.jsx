@@ -216,10 +216,25 @@ function Feeding() {
     setNotice('');
     setBusy(true);
     try {
-      await createFeedingTerm(termForm);
-      await refreshSetup();
+      const response = await createFeedingTerm(termForm);
+      const createdTerm = response.data;
+      const termResponse = await getFeedingTerms();
+      const nextTerms = termResponse.data;
+      setTerms(nextTerms);
+      setTermsLoaded(true);
+      const matchingTerm = nextTerms.find((term) => (
+        term.academic_year === createdTerm.academic_year
+        && term.term === createdTerm.term
+        && term.start_date <= registerDate
+        && term.end_date >= registerDate
+      )) || nextTerms.find((term) => String(term.id) === String(createdTerm.id));
+      if (matchingTerm) setRegisterTermId(String(matchingTerm.id));
+      setRegisterDate((current) => {
+        if (current >= createdTerm.start_date && current <= createdTerm.end_date) return current;
+        return createdTerm.start_date;
+      });
       setNotice('Feeding term and scheduled weekdays saved.');
-      if (termForm.start_date <= registerDate && termForm.end_date >= registerDate) setTab('register');
+      setTab('register');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Unable to save feeding term.');
     } finally {
@@ -426,7 +441,13 @@ function Feeding() {
             {termsLoaded && !coveringTerms.length && isAdmin && <div className="error" role="alert">
               No feeding term covers {registerDate}.
               <button type="button" className="btn-secondary" onClick={() => {
-                setTermForm((current) => ({ ...current, start_date: registerDate, end_date: registerDate }));
+                setTermForm((current) => ({
+        ...current,
+        start_date: registerDate,
+        end_date: registerDate,
+        academic_year: current.academic_year || `${new Date(registerDate).getUTCFullYear()}/${new Date(registerDate).getUTCFullYear() + 1}`,
+        scheduled_weekdays: [1, 2, 3, 4, 5],
+      }));
                 setTab('configuration');
               }}>Configure a term for this date</button>
             </div>}
