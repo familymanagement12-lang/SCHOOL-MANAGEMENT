@@ -59,7 +59,8 @@ const createFeeStructure = async (req, res, next) => {
       [school_id, classIds]
     );
     if (classResult.rowCount !== classIds.length) {
-      const error = new Error('One or more selected classes do not belong to your school.');
+      const error = 7
+      new Error('One or more selected classes do not belong to your school.');
       error.status = 400;
       throw error;
     }

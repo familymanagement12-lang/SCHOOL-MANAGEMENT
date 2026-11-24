@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   allocateCents,
   allocateRefundCents,
+  amountFromCents,
   listFeedingDays,
   moneyToCents,
   paymentStatus,
@@ -95,6 +96,8 @@ test('combined components allocate independently and refunds reverse only unrefu
 });
 
 test('money parsing is precise and daily coverage requires a fully paid obligation', () => {
+  assert.equal(moneyToCents('30'), 3000);
+  assert.equal(amountFromCents(3000), '30.00');
   assert.equal(moneyToCents('3000.00'), 300000);
   assert.equal(moneyToCents('1.5'), 150);
   assert.equal(moneyToCents('1.005'), null);
