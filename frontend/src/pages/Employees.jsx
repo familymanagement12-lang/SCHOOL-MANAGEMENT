@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
-import { getEmployees, createEmployee, updateEmployee, deactivateEmployee } from '../api/employees';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import { getEmployees, createEmployee, updateEmployee, deactivateEmployee, bulkUpsertEmployees } from '../api/employees';
 
 const STAFF_ROLES = [
   'Teacher',
@@ -29,10 +31,16 @@ function Employees() {
   
   const [editingId, setEditingId] = useState(null);
   const [customRole, setCustomRole] = useState('');
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkFile, setBulkFile] = useState(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState({ type: '', text: '' });
   const [formData, setFormData] = useState({
     full_name: '', role: 'Teacher', phone: '', email: '',
     basic_salary: 0, allowance: 0, deductions: 0,
-    bank_name: '', bank_account: '', is_active: true
+    bank_name: '', bank_account: '', is_active: true,
+    staff_id: '', pension_member_id: '', ssnit_number: '', date_of_birth: '',
+    ghana_card: '', employment_status: 'active', termination_date: ''
   });
 
   useEffect(() => {
@@ -60,14 +68,18 @@ function Employees() {
     setFormData({
       full_name: emp.full_name, role: knownRole ? emp.role : '__custom__', phone: emp.phone || '', email: emp.email || '',
       basic_salary: emp.basic_salary, allowance: emp.allowance, deductions: emp.deductions,
-      bank_name: emp.bank_name || '', bank_account: emp.bank_account || '', is_active: emp.is_active
+      bank_name: emp.bank_name || '', bank_account: emp.bank_account || '', is_active: emp.is_active,
+      staff_id: emp.staff_id || '', pension_member_id: emp.pension_member_id || '',
+      ssnit_number: emp.ssnit_number || '', date_of_birth: emp.date_of_birth ? String(emp.date_of_birth).slice(0, 10) : '',
+      ghana_card: emp.ghana_card || '', employment_status: emp.employment_status || (emp.is_active ? 'active' : 'inactive'),
+      termination_date: emp.termination_date ? String(emp.termination_date).slice(0, 10) : ''
     });
   };
 
   const handleCancel = () => {
     setEditingId(null);
     setCustomRole('');
-    setFormData({ full_name: '', role: 'Teacher', phone: '', email: '', basic_salary: 0, allowance: 0, deductions: 0, bank_name: '', bank_account: '', is_active: true });
+    setFormData({ full_name: '', role: 'Teacher', phone: '', email: '', basic_salary: 0, allowance: 0, deductions: 0, bank_name: '', bank_account: '', is_active: true, staff_id: '', pension_member_id: '', ssnit_number: '', date_of_birth: '', ghana_card: '', employment_status: 'active', termination_date: '' });
   };
 
   const handleSubmit = async (e) => {
@@ -110,6 +122,108 @@ function Employees() {
     }
   };
 
+  const extractCell = (cell) => {
+    if (!cell?.value) return '';
+    if (cell.value instanceof Date) return cell.value.toISOString().slice(0, 10);
+    if (typeof cell.value === 'object') {
+      if (cell.value.richText) return cell.value.richText.map((part) => part.text).join('').trim();
+      if (cell.value.text) return String(cell.value.text).trim();
+      if (typeof cell.value.result !== 'undefined') return String(cell.value.result).trim();
+    }
+    if (typeof cell.value === 'number' && !Number.isNaN(cell.value)) {
+      return String(cell.value);
+    }
+    return String(cell.value).trim();
+  };
+
+  const downloadStaffTemplate = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Staff Upload');
+    sheet.columns = [
+      { header: 'Staff ID', key: 'staff_id', width: 18 },
+      { header: 'Employee Name', key: 'employee_name', width: 28 },
+      { header: 'Pension Fund Member ID', key: 'pension_member_id', width: 24 },
+      { header: 'SSNIT Number', key: 'ssnit_number', width: 20 },
+      { header: 'Date of Birth', key: 'date_of_birth', width: 18 },
+      { header: 'Phone Number', key: 'phone', width: 18 },
+      { header: 'Ghana Card', key: 'ghana_card', width: 22 },
+      { header: 'Employment Status', key: 'employment_status', width: 20 },
+      { header: 'Termination Date', key: 'termination_date', width: 18 },
+    ];
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+    sheet.getRow(1).alignment = { horizontal: 'center' };
+    sheet.addRow(['', '', '', '', '', '', '', 'active', '']);
+    sheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+    sheet.addRow(['Example', 'Jane Doe', 'PENSION-001', 'C1234567890', '1990-05-20', '0240000000', 'GHA-000000000-1', 'active', '']);
+    sheet.getRow(3).font = { italic: true, color: { argb: 'FF64748B' } };
+    sheet.dataValidations.add('H2:H1001', {
+      type: 'list',
+      allowBlank: false,
+      formulae: ['"active,inactive,terminated,on_leave"'],
+    });
+    for (let row = 2; row <= 1001; row++) {
+      sheet.getRow(row).getCell(5).numFmt = '@';
+      sheet.getRow(row).getCell(9).numFmt = '@';
+    }
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), 'mccarthy_hill_staff_bulk_upload_template.xlsx');
+  };
+
+  const handleBulkUpload = async (event) => {
+    event.preventDefault();
+    setBulkMessage({ type: '', text: '' });
+    if (!bulkFile) {
+      setBulkMessage({ type: 'error', text: 'Select an Excel .xlsx file first.' });
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const buffer = await bulkFile.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) throw new Error('The workbook has no worksheet.');
+      const headers = {};
+      sheet.getRow(1).eachCell((cell, column) => {
+        headers[extractCell(cell).toLowerCase()] = column;
+      });
+      const findColumn = (...names) => names.map((name) => headers[name.toLowerCase()]).find(Boolean);
+      const staffIdColumn = findColumn('Staff ID');
+      const nameColumn = findColumn('Employee Name');
+      if (!staffIdColumn || !nameColumn) {
+        throw new Error('Required columns are missing: Staff ID and Employee Name.');
+      }
+      const staff = [];
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const staffId = extractCell(row.getCell(staffIdColumn));
+        const employeeName = extractCell(row.getCell(nameColumn));
+        if (!staffId && !employeeName) return;
+        staff.push({
+          staff_id: staffId,
+          full_name: employeeName,
+          pension_member_id: extractCell(row.getCell(findColumn('Pension Fund Member ID') || 3)),
+          ssnit_number: extractCell(row.getCell(findColumn('SSNIT Number') || 4)),
+          date_of_birth: extractCell(row.getCell(findColumn('Date of Birth') || 5)),
+          phone: extractCell(row.getCell(findColumn('Phone Number') || 6)),
+          ghana_card: extractCell(row.getCell(findColumn('Ghana Card') || 7)),
+          employment_status: extractCell(row.getCell(findColumn('Employment Status') || 8)) || 'active',
+          termination_date: extractCell(row.getCell(findColumn('Termination Date') || 9)),
+        });
+      });
+      if (!staff.length) throw new Error('No staff rows found in the workbook.');
+      const response = await bulkUpsertEmployees(staff);
+      setBulkMessage({ type: 'success', text: response.data.message });
+      setBulkFile(null);
+      await fetchEmployees();
+    } catch (err) {
+      setBulkMessage({ type: 'error', text: err.response?.data?.message || err.message || 'Bulk staff upload failed.' });
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const stats = useMemo(() => {
     const active = employees.filter(e => e.is_active);
     const monthlyCost = active.reduce((sum, e) => sum + Number(e.basic_salary) + Number(e.allowance) - Number(e.deductions), 0);
@@ -133,6 +247,9 @@ function Employees() {
             <h1 style={{ color: '#ffffff', fontSize: '2.5rem', marginTop: '0.25rem', marginBottom: '0.5rem' }}>Staff Registry</h1>
             <p style={{ color: '#f5f3ff', fontSize: '1.1rem', opacity: 0.9 }}>Manage employee profiles, bank details, and salary structures.</p>
           </div>
+          <button type="button" className="btn-secondary" onClick={() => { setBulkMessage({ type: '', text: '' }); setShowBulkModal(true); }} style={{ background: '#ffffff', color: '#1e3a8a', border: 'none', whiteSpace: 'nowrap' }}>
+            Bulk Upload Staff
+          </button>
         </section>
 
         <section className="module-stats">
@@ -164,6 +281,24 @@ function Employees() {
               />
             )}
             <small>Job title for the staff record and payroll; it does not grant system access.</small>
+
+            <h3 style={{ margin: '1rem 0 0', fontSize: '1.1rem', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>Employment Identity</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div><label>Staff ID</label><input type="text" value={formData.staff_id} onChange={e => setFormData({ ...formData, staff_id: e.target.value })} /></div>
+              <div><label>Pension Fund Member ID</label><input type="text" value={formData.pension_member_id} onChange={e => setFormData({ ...formData, pension_member_id: e.target.value })} /></div>
+              <div><label>SSNIT Number</label><input type="text" value={formData.ssnit_number} onChange={e => setFormData({ ...formData, ssnit_number: e.target.value })} /></div>
+              <div><label>Date of Birth</label><input type="date" value={formData.date_of_birth} onChange={e => setFormData({ ...formData, date_of_birth: e.target.value })} /></div>
+              <div><label>Ghana Card</label><input type="text" value={formData.ghana_card} onChange={e => setFormData({ ...formData, ghana_card: e.target.value })} /></div>
+              <div><label>Employment Status</label><select value={formData.employment_status} onChange={e => setFormData({ ...formData, employment_status: e.target.value, is_active: e.target.value === 'active' })}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="terminated">Terminated</option>
+                <option value="on_leave">On Leave</option>
+              </select></div>
+              {(formData.employment_status === 'terminated' || formData.termination_date) && (
+                <div><label>Termination Date</label><input type="date" value={formData.termination_date} onChange={e => setFormData({ ...formData, termination_date: e.target.value })} /></div>
+              )}
+            </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div><label>Phone</label><input type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
@@ -195,14 +330,19 @@ function Employees() {
             <div className="panel-heading"><div><p className="eyebrow">Directory</p><h2>Employee Roster</h2></div></div>
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Employee</th><th>Net Salary</th><th>Bank Info</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Employee</th><th>Official IDs</th><th>Net Salary</th><th>Bank Info</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                   {employees.map(emp => (
                     <tr key={emp.id} style={{ opacity: emp.is_active ? 1 : 0.6 }}>
                       <td><strong>{emp.full_name}</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>{emp.role}</div></td>
+                      <td><span style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>
+                        Staff: {emp.staff_id || '-'}<br />
+                        SSNIT: {emp.ssnit_number || '-'}<br />
+                        Ghana Card: {emp.ghana_card || '-'}
+                      </span></td>
                       <td><strong style={{ color: '#075e9a' }}>{formatMoney(Number(emp.basic_salary) + Number(emp.allowance) - Number(emp.deductions))}</strong></td>
                       <td><span style={{ fontSize: '0.85rem' }}>{emp.bank_name || '-'}<br/>{emp.bank_account || ''}</span></td>
-                      <td><span className={`status-pill ${emp.is_active ? 'present' : 'absent'}`}>{emp.is_active ? 'Active' : 'Inactive'}</span></td>
+                      <td><span className={`status-pill ${emp.is_active ? 'present' : 'absent'}`}>{(emp.employment_status || (emp.is_active ? 'active' : 'inactive')).replace('_', ' ')}</span></td>
                       <td>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                           <button type="button" className="btn-small btn-edit" onClick={() => handleEdit(emp)}>Edit</button>
@@ -219,6 +359,36 @@ function Employees() {
           </section>
         </section>
       </div>
+
+      {showBulkModal && (
+        <div className="modal-overlay" onClick={() => setShowBulkModal(false)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '680px' }}>
+            <div className="modal-header">
+              <div><p className="eyebrow">Excel Bulk Import</p><h2>Upload Staff Registry</h2></div>
+              <button type="button" className="btn-close" onClick={() => setShowBulkModal(false)}>x</button>
+            </div>
+            {bulkMessage.text && (
+              <div className={bulkMessage.type === 'error' ? 'error' : 'success'} style={{ marginBottom: '1rem' }}>
+                {bulkMessage.text}
+              </div>
+            )}
+            <p style={{ color: '#64748b', lineHeight: 1.6 }}>
+              Staff ID and Employee Name are required. Existing Staff IDs update the employee record; new Staff IDs create staff records. Active records are included in payroll and staff attendance.
+            </p>
+            <form onSubmit={handleBulkUpload}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', margin: '1rem 0' }}>
+                <label style={{ margin: 0 }}>Excel (.xlsx) *</label>
+                <button type="button" className="btn-secondary" onClick={downloadStaffTemplate}>Download Template</button>
+              </div>
+              <input type="file" accept=".xlsx" onChange={(event) => setBulkFile(event.target.files?.[0] || null)} required />
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={() => setShowBulkModal(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={bulkLoading}>{bulkLoading ? 'Uploading...' : 'Upload & Update Staff'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ const getPayroll = async (req, res, next) => {
   try {
     let query = `
       SELECT p.*, e.full_name, e.role, e.bank_name, e.bank_account,
+        e.staff_id, e.ssnit_number, e.ghana_card, e.employment_status,
         COALESCE(
           (SELECT json_agg(json_build_object('id', pd.id, 'type', pd.type, 'amount', pd.amount, 'description', pd.description))
            FROM payroll_deductions pd WHERE pd.payroll_id = p.id), '[]'::json
@@ -21,7 +22,7 @@ const getPayroll = async (req, res, next) => {
       query += ` AND p.month = $2 AND p.year = $3`;
       values.push(month, year);
     }
-    
+    4
     query += ` ORDER BY p.year DESC, p.month DESC, e.full_name ASC`;
     
     const result = await pool.query(query, values);

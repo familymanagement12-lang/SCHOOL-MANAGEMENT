@@ -185,6 +185,13 @@ CREATE TABLE IF NOT EXISTS employees (
   bank_name TEXT,
   bank_account TEXT,
   is_active BOOLEAN DEFAULT TRUE,
+  staff_id TEXT,
+  pension_member_id TEXT,
+  ssnit_number TEXT,
+  date_of_birth DATE,
+  ghana_card TEXT,
+  employment_status TEXT DEFAULT 'active',
+  termination_date DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

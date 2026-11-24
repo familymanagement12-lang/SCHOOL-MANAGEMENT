@@ -56,10 +56,25 @@ const createUser = async (req, res, next) => {
 
     // Automatically add teachers and admins to the HR/Payroll Employees table
     if (role === 'teacher' || role === 'admin') {
-      await pool.query(
-        'INSERT INTO employees (school_id, full_name, role, email, is_active) VALUES ($1, $2, $3, $4, $5)',
-        [school_id, name, role, email, is_active !== false]
+      const existingEmployee = await pool.query(
+        'SELECT id FROM employees WHERE school_id=$1 AND email=$2 LIMIT 1',
+        [school_id, email]
       );
+      if (existingEmployee.rows.length) {
+        await pool.query(
+          `UPDATE employees SET full_name=$1, role=$2, email=$3, is_active=$4,
+                  employment_status=CASE WHEN $4 THEN 'active' ELSE 'inactive' END
+           WHERE id=$5 AND school_id=$6`,
+          [name, role, email, is_active !== false, existingEmployee.rows[0].id, school_id]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO employees
+             (school_id, full_name, role, email, is_active, employment_status)
+           VALUES ($1,$2,$3,$4,$5,CASE WHEN $5 THEN 'active' ELSE 'inactive' END)`,
+          [school_id, name, role, email, is_active !== false]
+        );
+      }
     }
 
     // 3. Send Verification Email via Resend
@@ -151,6 +166,10 @@ const updateUser = async (req, res, next) => {
   if (role && !['admin', 'teacher', 'librarian', 'inventory', 'store', 'storekeeper', 'accountant', 'feeding_tuckshop_officer'].includes(role)) return res.status(400).json({ message: 'Invalid user role.' });
 
   try {
+    const oldUser = await pool.query(
+      'SELECT name, email, role, is_active FROM users WHERE id=$1 AND school_id=$2',
+      [id, school_id]
+    );
     const client = await pool.connect();
     let result;
     try {
@@ -178,7 +197,24 @@ const updateUser = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    res.json(result.rows[0]);
+    const updatedUser = result.rows[0];
+    if (['teacher', 'admin'].includes(updatedUser.role)) {
+      const previous = oldUser.rows[0];
+      await pool.query(
+        `UPDATE employees
+         SET full_name=$1,
+             role=$2,
+             email=$3,
+             is_active=$4,
+             employment_status=CASE WHEN $4 THEN 'active' ELSE 'inactive' END
+         WHERE school_id=$5
+           AND (email=$6 OR full_name=$7)`,
+        [updatedUser.name, updatedUser.role, updatedUser.email, updatedUser.is_active,
+         school_id, previous?.email || updatedUser.email, previous?.name || updatedUser.name]
+      );
+    }
+
+    res.json(updatedUser);
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({ message: 'Email already exists' });
@@ -213,12 +249,24 @@ const deleteUser = async (req, res, next) => {
   }
 
   try {
+    const existingUser = await pool.query(
+      'SELECT name, email, role FROM users WHERE id=$1 AND school_id=$2',
+      [id, school_id]
+    );
     const result = await pool.query(
       'DELETE FROM users WHERE id = $1 AND school_id = $2 RETURNING id',
       [id, school_id]
     );
     
     if (result.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
+
+    if (existingUser.rows[0] && ['teacher', 'admin'].includes(existingUser.rows[0].role)) {
+      await pool.query(
+        `UPDATE employees SET is_active=FALSE, employment_status='inactive'
+         WHERE school_id=$1 AND (email=$2 OR full_name=$3)`,
+        [school_id, existingUser.rows[0].email, existingUser.rows[0].name]
+      );
+    }
     
     res.json({ message: 'User deleted successfully.' });
   } catch (error) {

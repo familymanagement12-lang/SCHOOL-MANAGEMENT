@@ -120,7 +120,7 @@ function Payroll() {
                 <tbody>
                   {payroll.map(p => (
                     <tr key={p.id}>
-                      <td><strong>{p.full_name}</strong><div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.role}</div></td>
+                      <td><strong>{p.full_name}</strong><div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.role}</div><div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Staff ID: {p.staff_id || '-'}</div></td>
                       <td>{formatMoney(p.gross_salary)}</td>
                       <td>
                         <div style={{ color: '#ef4444', fontWeight: 'bold' }}>- {formatMoney(p.deductions)}</div>
