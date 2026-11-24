@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const pool = require('../config/db');
+const { canonicalClassName } = require('../services/curriculumPolicy');
 const regexpDigits = (value) => value.replace(/[^0-9]/g, '');
 
 const parentStudent = async (schoolId, parentUserId, studentId) => pool.query(
@@ -79,7 +80,10 @@ const getChildren = async (req, res, next) => {
        ORDER BY s.name, s.id`,
       [req.user.school_id, req.user.id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map((child) => ({
+      ...child,
+      class_name: canonicalClassName(child.class_name, child.year_level, child.curriculum),
+    })));
   } catch (error) {
     next(error);
   }
@@ -89,7 +93,7 @@ const getDashboard = async (req, res, next) => {
   try {
     const children = await pool.query(
       `SELECT DISTINCT s.id, s.name, LPAD(s.id::TEXT, 6, '0') AS admission_number,
-              s.class_id, c.name AS class_name, c.year_level,
+              s.class_id, s.curriculum, c.name AS class_name, c.year_level,
               sc.academic_year, sc.current_term, sc.currency,
               COALESCE(fees.outstanding, 0)::NUMERIC(12,2) AS fees_outstanding,
               COALESCE(feeding.due, 0)::NUMERIC(12,2) AS feeding_due,
@@ -145,7 +149,8 @@ const getDashboard = async (req, res, next) => {
       [req.user.school_id, req.user.id]
     );
     const notices = await pool.query(
-      `SELECT a.id, a.title, a.message, a.created_at, c.name AS class_name
+      `SELECT a.id, a.title, a.message, a.created_at, c.name AS class_name,
+              c.year_level, c.curriculum AS class_curriculum
        FROM announcements a
        LEFT JOIN classes c ON c.id = a.class_id AND c.school_id = a.school_id
        WHERE a.school_id = $1
@@ -177,7 +182,17 @@ const getDashboard = async (req, res, next) => {
        VALUES ($1, $2, $2, 'DASHBOARD_VIEWED')`,
       [req.user.school_id, req.user.id]
     );
-    res.json({ children: children.rows, announcements: notices.rows, recent_payments: payments.rows });
+    res.json({
+      children: children.rows.map((child) => ({
+        ...child,
+        class_name: canonicalClassName(child.class_name, child.year_level, child.curriculum),
+      })),
+      announcements: notices.rows.map((notice) => ({
+        ...notice,
+        class_name: canonicalClassName(notice.class_name, notice.year_level, notice.class_curriculum),
+      })),
+      recent_payments: payments.rows,
+    });
   } catch (error) {
     next(error);
   }
@@ -333,7 +348,8 @@ const getResults = async (req, res, next) => {
     const child = await requireChild(req, res);
     if (!child) return;
     const result = await pool.query(
-      `SELECT id, subject, class_score, exam_score, score, term, published_at
+      `SELECT id, subject, class_score, exam_score, score, term, published_at,
+              academic_year_snapshot, class_name_snapshot, curriculum
        FROM results
        WHERE school_id = $1 AND student_id = $2 AND is_published = TRUE
        ORDER BY published_at DESC NULLS LAST, created_at DESC, subject`,
@@ -441,7 +457,7 @@ const getProfile = async (req, res, next) => {
       ),
       pool.query(
         `SELECT s.id, s.name, LPAD(s.id::TEXT, 6, '0') AS admission_number,
-                c.name AS class_name, sp.relationship
+                c.name AS class_name, c.year_level, c.curriculum, sp.relationship
          FROM student_parent sp
          JOIN parents p ON p.id = sp.parent_id AND p.school_id = sp.school_id
          JOIN students s ON s.id = sp.student_id AND s.school_id = sp.school_id
@@ -454,7 +470,10 @@ const getProfile = async (req, res, next) => {
     if (!parent.rowCount) return res.status(404).json({ message: 'Parent profile not found.' });
     res.json({
       ...parent.rows[0],
-      children: children.rows,
+      children: children.rows.map((child) => ({
+        ...child,
+        class_name: canonicalClassName(child.class_name, child.year_level, child.curriculum),
+      })),
       preferences: preferences.rows[0] || {
         announcements: true, fee_reminders: true, feeding_reminders: true, emergency_notices: true,
       },
@@ -738,7 +757,8 @@ const getAdminParents = async (req, res, next) => {
               p.phone,
               COALESCE(json_agg(DISTINCT jsonb_build_object(
                 'id', s.id, 'name', s.name, 'admission_number', LPAD(s.id::TEXT, 6, '0'),
-                'class_name', c.name, 'relationship', sp.relationship
+                'class_name', c.name, 'year_level', c.year_level,
+                'curriculum', c.curriculum, 'relationship', sp.relationship
               )) FILTER (WHERE s.id IS NOT NULL), '[]'::JSON) AS children
        FROM users u
        LEFT JOIN parents p ON p.user_id = u.id AND p.school_id = u.school_id
@@ -750,7 +770,13 @@ const getAdminParents = async (req, res, next) => {
        ORDER BY u.created_at DESC`,
       [req.user.school_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map((parent) => ({
+      ...parent,
+      children: parent.children.map((child) => ({
+        ...child,
+        class_name: canonicalClassName(child.class_name, child.year_level, child.curriculum),
+      })),
+    })));
   } catch (error) {
     next(error);
   }

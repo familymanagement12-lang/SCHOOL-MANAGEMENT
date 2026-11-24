@@ -1,6 +1,16 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { canonicalClassName } = require('../services/curriculumPolicy');
+
+const withCanonicalClassName = (student) => ({
+  ...student,
+  class_name: canonicalClassName(
+    student.class_name,
+    student.year_level,
+    student.class_curriculum || student.curriculum,
+  ),
+});
 
 const studentSelect = `
   SELECT DISTINCT
@@ -37,7 +47,7 @@ const ensureClassBelongsToSchool = async (classId, schoolId) => {
   }
 
   const result = await pool.query(
-    'SELECT id, year_level, curriculum FROM classes WHERE id = $1 AND school_id = $2',
+    'SELECT id, name, year_level, curriculum FROM classes WHERE id = $1 AND school_id = $2',
     [classId, schoolId]
   );
   if (!result.rows.length) {
@@ -61,18 +71,18 @@ const getStudents = async (req, res, next) => {
     if (role === 'accountant') {
       const result = await pool.query(
         `SELECT s.id, LPAD(s.id::text, 6, '0') AS student_id, s.name,
-                s.class_id, c.name AS class_name
+                s.class_id, c.name AS class_name, s.curriculum, c.curriculum AS class_curriculum, c.year_level
          FROM students s LEFT JOIN classes c ON c.id = s.class_id AND c.school_id = s.school_id
          WHERE s.school_id = $1 ORDER BY s.id`,
         [school_id]
       );
-      return res.json(result.rows);
+      return res.json(result.rows.map(withCanonicalClassName));
     }
     const query = `${studentSelect} WHERE s.school_id = $1 ORDER BY s.id`;
     const values = [school_id];
 
     const result = await pool.query(query, values);
-    res.json(result.rows);
+    res.json(result.rows.map(withCanonicalClassName));
   } catch (error) {
     next(error);
   }
@@ -92,7 +102,7 @@ const getStudentById = async (req, res, next) => {
       return res.status(404).json({ message: 'Student not found.' });
     }
 
-    res.json(result.rows[0]);
+    res.json(withCanonicalClassName(result.rows[0]));
   } catch (error) {
     next(error);
   }
@@ -112,7 +122,7 @@ const createStudent = async (req, res, next) => {
       return res.status(400).json({ message: 'Please select a valid class.' });
     }
 
-    await ensureClassBelongsToSchool(normalizedClassId, school_id);
+    const assignedClass = await ensureClassBelongsToSchool(normalizedClassId, school_id);
 
     const client = await pool.connect();
     try {
@@ -138,7 +148,11 @@ const createStudent = async (req, res, next) => {
       await client.query('UPDATE students SET user_id = $1 WHERE id = $2', [studentUserRes.rows[0].id, newStudent.id]);
 
       await client.query('COMMIT');
-      res.status(201).json({ ...newStudent, studentPassword });
+      res.status(201).json({
+        ...newStudent,
+        class_name: canonicalClassName(assignedClass?.name, assignedClass?.year_level, assignedClass?.curriculum),
+        studentPassword,
+      });
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -164,7 +178,7 @@ const updateStudent = async (req, res, next) => {
       return res.status(400).json({ message: 'Please select a valid class.' });
     }
 
-    await ensureClassBelongsToSchool(normalizedClassId, school_id);
+    const assignedClass = await ensureClassBelongsToSchool(normalizedClassId, school_id);
 
     const result = await pool.query(
       `UPDATE students
@@ -178,7 +192,10 @@ const updateStudent = async (req, res, next) => {
       return res.status(404).json({ message: 'Student not found.' });
     }
 
-    res.json(result.rows[0]);
+    res.json({
+      ...result.rows[0],
+      class_name: canonicalClassName(assignedClass?.name, assignedClass?.year_level, assignedClass?.curriculum),
+    });
   } catch (error) {
     next(error);
   }

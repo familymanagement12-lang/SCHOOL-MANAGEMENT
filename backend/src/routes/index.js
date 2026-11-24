@@ -20,6 +20,7 @@ const libraryRoutes = require('./library');
 const aiRoutes = require('./ai');
 const studentPortalRoutes = require('./studentPortal');
 const parentPortalRoutes = require('./parentPortal');
+const curriculumSelectionRoutes = require('./curriculumSelections');
 const feedingRoutes = require('./feeding');
 const operationsRoutes = require('./operations');
 
@@ -48,5 +49,6 @@ router.use('/library', libraryRoutes);
 router.use('/ai', aiRoutes);
 router.use('/student-portal', studentPortalRoutes);
 router.use('/parent-portal', parentPortalRoutes);
+router.use('/curriculum-selections', curriculumSelectionRoutes);
 
 module.exports = router;

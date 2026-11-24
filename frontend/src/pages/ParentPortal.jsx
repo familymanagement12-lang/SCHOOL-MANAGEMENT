@@ -6,10 +6,16 @@ import {
 } from 'lucide-react';
 import api from '../api/api';
 import { changePassword } from '../api/users';
+import {
+  getParentCurriculumSelections,
+  requestParentCurriculumChange,
+  submitParentCurriculumSelection,
+} from '../api/curriculumSelections';
 
 const ParentContext = createContext(null);
 const navItems = [
   { to: '/parent', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/parent/curriculum', label: 'Curriculum selection', icon: GraduationCap },
   { to: '/parent/fees', label: 'School fees', icon: WalletCards },
   { to: '/parent/feeding', label: 'Feeding account', icon: BookOpenCheck },
   { to: '/parent/results', label: 'Academic results', icon: GraduationCap },
@@ -206,7 +212,7 @@ export function ParentDashboard() {
             const percent = child.attendance_total ? Math.round((child.attendance_present / child.attendance_total) * 100) : 0;
             return <article className="parent-child-card" key={child.id}>
               <div className="parent-child-avatar">{child.name.slice(0, 1).toUpperCase()}</div>
-              <div className="parent-child-title"><div><h2>{child.name}</h2><p>{child.class_name || 'Class not assigned'}{child.year_level ? ` · Year ${child.year_level}` : ''}</p></div><span className="parent-admission">ID {child.admission_number}</span></div>
+              <div className="parent-child-title"><div><h2>{child.name}</h2><p>{child.class_name || 'Class not assigned'}</p></div><span className="parent-admission">ID {child.admission_number}</span></div>
               <div className="parent-child-metrics">
                 <div><small>Academic year</small><strong>{child.academic_year || 'Not set'} · {child.current_term || 'No term'}</strong></div>
                 <div><small>Attendance</small><strong>{percent}%</strong></div>
@@ -234,6 +240,141 @@ export function ParentDashboard() {
         <div className="parent-note">School events, published homework and examination schedules will appear here when those modules are available to families.</div>
       </>}
     </LoadingPanel>
+  </ParentPage>;
+}
+
+function CurriculumSelectionCard({ child, academicYear, period, onRefresh }) {
+  const [curriculum, setCurriculum] = useState(child.curriculum === 'GES' ? 'PEARSON' : 'GES');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const periodOpen = Boolean(period?.enabled
+    && Date.now() >= Date.parse(period.opens_at)
+    && Date.now() <= Date.parse(period.deadline));
+  const activeSelection = child.selection_id && child.status !== 'rejected';
+  const activeChange = child.request_type === 'change_request'
+    && ['pending_approval', 'approved_pending_class'].includes(child.status);
+  const initialEligible = Number(child.year_level) === 6 && child.curriculum === 'COMMON';
+  const hasPathway = ['GES', 'PEARSON'].includes(child.curriculum);
+  const selectedLabel = curriculum === 'GES' ? 'GES - JHS 1 to JHS 3' : 'Pearson - Year 7 to Year 11';
+
+  const submit = async (changeRequest) => {
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      if (changeRequest) {
+        await requestParentCurriculumChange(child.student_id, { curriculum, reason });
+        setMessage('Your pathway change request was sent to the school for review.');
+      } else {
+        await submitParentCurriculumSelection(child.student_id, { curriculum, reason });
+        setMessage('Your pathway selection was sent to the school for approval.');
+      }
+      setReason('');
+      await onRefresh();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Unable to submit your curriculum request.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <article className="parent-panel parent-curriculum-card">
+    <div className="parent-panel-heading">
+      <div><h2>{child.name}</h2><p>ID {child.admission_number} · {child.class_name || 'Class not assigned'}</p></div>
+      <span className="parent-admission">{academicYear || child.academic_year || 'Academic year not set'}</span>
+    </div>
+    <div className="parent-curriculum-pathways">
+      <div><strong>GES</strong><span>JHS 1 to JHS 3</span></div>
+      <div><strong>Pearson</strong><span>Year 7 to Year 11</span></div>
+    </div>
+
+    {initialEligible && <>
+      {activeSelection ? <div className="parent-curriculum-status">
+        <strong>Pathway request: {child.selected_curriculum === 'GES' ? 'GES - JHS 1 to JHS 3' : 'Pearson - Year 7 to Year 11'}</strong>
+        <span className={`parent-request-status ${child.status}`}>{child.status.replace(/_/g, ' ')}</span>
+        {child.status === 'approved_pending_class' && <p>The school has approved the pathway. An administrator will assign the matching class.</p>}
+        {child.status === 'assigned' && <p>Assigned class: {child.assigned_class_name || 'Class details unavailable'}</p>}
+      </div> : <div className="parent-form parent-curriculum-form">
+        {child.status === 'rejected' && <div className="parent-error"><strong>Previous request declined:</strong> {child.rejection_reason || 'Please contact the school office for details.'}</div>}
+        {!periodOpen && <p className="parent-note">Curriculum selections are not open. Contact the school office if you need help.</p>}
+        {periodOpen && <>
+          <label>Choose a pathway
+            <select value={curriculum} onChange={(event) => setCurriculum(event.target.value)}>
+              <option value="GES">GES - JHS 1 to JHS 3</option>
+              <option value="PEARSON">Pearson - Year 7 to Year 11</option>
+            </select>
+          </label>
+          <label>Optional note for the school
+            <textarea value={reason} maxLength={1000} rows={3}
+              onChange={(event) => setReason(event.target.value)} />
+          </label>
+          <p className="parent-note">This submits a request for school approval. It does not choose a class section or change your child's current class.</p>
+          <button className="parent-button primary" type="button" disabled={saving}
+            onClick={() => submit(false)}>{saving ? 'Submitting…' : `Request ${selectedLabel}`}</button>
+        </>}
+      </div>}
+    </>}
+
+    {hasPathway && !initialEligible && <div className="parent-form parent-curriculum-form">
+      {activeChange ? <div className="parent-curriculum-status">
+        <strong>Pathway change request: {child.selected_curriculum === 'GES' ? 'GES' : 'Pearson'}</strong>
+        <span className={`parent-request-status ${child.status}`}>{child.status.replace(/_/g, ' ')}</span>
+        {child.status === 'approved_pending_class' && <p>The school has approved the change. An administrator will assign a matching class at the current stage.</p>}
+      </div> : <>
+        <h3>Request a pathway change</h3>
+        <label>Requested pathway
+          <select value={curriculum} onChange={(event) => setCurriculum(event.target.value)}>
+            <option value="GES" disabled={child.curriculum === 'GES'}>GES - JHS 1 to JHS 3</option>
+            <option value="PEARSON" disabled={child.curriculum === 'PEARSON'}>Pearson - Year 7 to Year 11</option>
+          </select>
+        </label>
+        <label>Reason for the change
+          <textarea value={reason} maxLength={1000} rows={3}
+            onChange={(event) => setReason(event.target.value)} />
+        </label>
+        <p className="parent-note">The school must review this request and assign any new class. Your child's records are not changed when you submit it.</p>
+        <button className="parent-button primary" type="button" disabled={saving || reason.trim().length < 10}
+          onClick={() => submit(true)}>{saving ? 'Submitting…' : 'Request pathway change'}</button>
+      </>}
+    </div>}
+    {error && <p className="parent-error" role="alert">{error}</p>}
+    {message && <p className="parent-success" role="status">{message}</p>}
+  </article>;
+}
+
+export function ParentCurriculumSelection() {
+  const [data, setData] = useState({ children: [], selection_period: null, academic_year: null });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    getParentCurriculumSelections().then((response) => {
+      if (active) setData(response.data);
+    }).catch((requestError) => {
+      if (active) setError(requestError.response?.data?.message || 'Unable to load curriculum selection details.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [refreshVersion]);
+  const refresh = () => setRefreshVersion((current) => current + 1);
+
+  return <ParentPage title="Curriculum selection" description="Choose a pathway for an eligible Year 6 child or request a change. The school reviews every request and assigns the class.">
+    {loading ? <div className="parent-panel" role="status">Loading curriculum choices…</div>
+      : error ? <div className="parent-error" role="alert">{error}</div>
+        : data.children.length ? <>
+          <div className="parent-note">GES continues as Year 6 → JHS 1 → JHS 2 → JHS 3. Pearson continues as Year 6 → Year 7 → Year 8 → Year 9 → Year 10 → Year 11. Parents request the curriculum only; class placement remains with school administrators.</div>
+          <section className="parent-curriculum-list">
+            {data.children.map((child) => <CurriculumSelectionCard key={child.student_id}
+              child={child} academicYear={data.academic_year} period={data.selection_period}
+              onRefresh={refresh} />)}
+          </section>
+        </> : <div className="parent-panel">No children are linked to your account. Contact the school office to add an approved link.</div>}
   </ParentPage>;
 }
 
@@ -330,12 +471,13 @@ export function ParentFeeding() {
 }
 
 export function ParentResults() {
+  const { selectedChild } = useParentChild();
   const { data, loading, error } = useChildResource('results', []);
   return <ChildRequired><ParentPage title="Academic results" description="Only examination results published by authorized staff are shown.">
     <LoadingPanel loading={loading} error={error}>{data.length ? <>
       <button className="parent-button secondary parent-print" onClick={() => window.print()}>Print / Save report</button>
-      <div className="parent-panel parent-table-wrap"><table><thead><tr><th>Term</th><th>Subject</th><th>Class assessment</th><th>Examination</th><th>Total</th><th>Published</th></tr></thead><tbody>
-        {data.map((row) => <tr key={row.id}><td>{row.term}</td><td>{row.subject}</td><td>{row.class_score ?? '—'}</td><td>{row.exam_score ?? '—'}</td><td><strong>{row.score}</strong></td><td>{row.published_at ? new Date(row.published_at).toLocaleDateString() : 'Published'}</td></tr>)}
+      <div className="parent-panel parent-table-wrap"><table><thead><tr><th>Academic year · term</th><th>Class</th><th>Subject</th><th>Class assessment</th><th>Examination</th><th>Total</th><th>Published</th></tr></thead><tbody>
+        {data.map((row) => <tr key={row.id}><td>{row.academic_year_snapshot || selectedChild?.academic_year || '—'} · {row.term}</td><td>{row.class_name_snapshot || selectedChild?.class_name || '—'}</td><td>{row.subject}</td><td>{row.class_score ?? '—'}</td><td>{row.exam_score ?? '—'}</td><td><strong>{row.score}</strong></td><td>{row.published_at ? new Date(row.published_at).toLocaleDateString() : 'Published'}</td></tr>)}
       </tbody></table></div>
     </> : <div className="parent-panel parent-empty">There are no published results for this child yet. Draft results are not visible.</div>}</LoadingPanel>
   </ParentPage></ChildRequired>;

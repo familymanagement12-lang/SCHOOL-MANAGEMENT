@@ -6,6 +6,13 @@ test('scales pooled exercise and mid-semester marks to a class score out of 50',
   assert.equal(calculateClassScore(42, 60), 35);
 });
 
+test('keeps class assessment and examination components at the fixed 50/50 weighting', () => {
+  const classComponent = calculateClassScore(80, 100);
+  const examinationComponent = 35;
+  assert.equal(classComponent, 40);
+  assert.equal(classComponent + examinationComponent, 75);
+});
+
 test('rounds the class score to two decimal places', () => {
   assert.equal(calculateClassScore(1, 3), 16.67);
 });

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { solveTimetable } = require('../services/timetableSolver');
+const { canonicalClassName } = require('../services/curriculumPolicy');
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const ALL_DAYS = [...DAYS, 'Saturday', 'Sunday'];
@@ -696,7 +697,8 @@ const hydrateTimetableRows = async (schoolId, filters = {}) => {
   }
 
   const result = await pool.query(
-        `SELECT t.*, COALESCE(t.class_name_snapshot, c.name) AS class_name, c.class_teacher_id, c.year_level, c.teaching_model,
+        `SELECT t.*, COALESCE(t.class_name_snapshot, c.name) AS class_name,
+          c.class_teacher_id, c.year_level, c.curriculum, c.teaching_model,
           ct.name AS class_teacher_name, COALESCE(t.subject_name_snapshot, s.name, t.subject) AS subject_name, COALESCE(t.teacher_name_snapshot, u.name) AS teacher_name,
             COALESCE(t.room_name_snapshot, r.name) AS room_name, p.name AS period_name, p.is_break
        FROM timetables t
@@ -711,7 +713,11 @@ const hydrateTimetableRows = async (schoolId, filters = {}) => {
               t.start_time, c.name`,
     values
   );
-  return result.rows.map((row) => ({ ...row, subject: row.subject_name || row.subject }));
+  return result.rows.map((row) => ({
+    ...row,
+    class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum),
+    subject: row.subject_name || row.subject,
+  }));
 };
 
 const getTimetable = async (req, res, next) => {
@@ -759,7 +765,8 @@ const getTimetable = async (req, res, next) => {
       );
       if (!rows.rows.length) return res.json([]);
       const result = await pool.query(
-        `SELECT t.*, COALESCE(t.class_name_snapshot, c.name) AS class_name, COALESCE(t.subject_name_snapshot, s.name, t.subject) AS subject_name,
+        `SELECT t.*, COALESCE(t.class_name_snapshot, c.name) AS class_name,
+                c.year_level, c.curriculum, COALESCE(t.subject_name_snapshot, s.name, t.subject) AS subject_name,
                 COALESCE(t.teacher_name_snapshot, u.name) AS teacher_name, COALESCE(t.room_name_snapshot, r.name) AS room_name, p.name AS period_name
          FROM timetables t
      LEFT JOIN classes c ON t.school_id = c.school_id AND t.class_id = c.id
@@ -771,7 +778,11 @@ const getTimetable = async (req, res, next) => {
          ORDER BY t.day_of_week, t.start_time`,
         [school_id, rows.rows.map((row) => row.class_id).filter(Boolean), version.id]
       );
-      return res.json(result.rows.map((row) => ({ ...row, subject: row.subject_name || row.subject })));
+      return res.json(result.rows.map((row) => ({
+        ...row,
+        class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum),
+        subject: row.subject_name || row.subject,
+      })));
     } else if (role === 'teacher') {
       filters.teacherId = userId;
       if (classId) {

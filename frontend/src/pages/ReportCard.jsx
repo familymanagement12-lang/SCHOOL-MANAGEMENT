@@ -111,7 +111,7 @@ function ReportCard() {
           <div><strong style={{ color: '#64748b' }}>Student Name:</strong> {report.student.name}</div>
           <div><strong style={{ color: '#64748b' }}>Student ID:</strong> {report.student.student_id}</div>
           <div><strong style={{ color: '#64748b' }}>Class:</strong> {report.student.class_name}</div>
-          <div><strong style={{ color: '#64748b' }}>Academic Year:</strong> {school.academic_year || '2023/2024'}</div>
+          <div><strong style={{ color: '#64748b' }}>Academic Year:</strong> {report.student.academic_year || school.academic_year || 'Not set'}</div>
         </div>
 
         {/* Grades Table */}

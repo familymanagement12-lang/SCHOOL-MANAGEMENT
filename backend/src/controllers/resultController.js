@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { calculateClassScore } = require('../services/classScore');
+const { canonicalClassName } = require('../services/curriculumPolicy');
 
 const listClassAssessments = async (req, res, next) => {
   const { school_id } = req.user;
@@ -147,8 +148,6 @@ const saveClassAssessmentScores = async (req, res, next) => {
          VALUES ($1, $2, $3, $4, 0, $4, $5)
          ON CONFLICT (student_id, subject, term)
          DO UPDATE SET class_score = EXCLUDED.class_score,
-                       class_id = EXCLUDED.class_id,
-                       curriculum = EXCLUDED.curriculum,
                        score = EXCLUDED.class_score + results.exam_score,
                        is_published = FALSE,
                        published_at = NULL`,
@@ -188,6 +187,8 @@ const getStudentResults = async (req, res, next) => {
     const result = await pool.query(
       `SELECT r.id, r.subject, r.class_score, r.exam_score, r.score, r.term,
               r.is_published, r.published_at, r.created_at,
+              r.class_id, r.curriculum, r.class_name_snapshot,
+              r.year_level_snapshot, r.academic_year_snapshot,
               (
                 SELECT COALESCE(
                   json_agg(json_build_object(
@@ -201,7 +202,7 @@ const getStudentResults = async (req, res, next) => {
                 FROM class_assessments a
                 LEFT JOIN class_assessment_scores m
                   ON m.assessment_id = a.id AND m.student_id = s.id AND m.school_id = a.school_id
-                WHERE a.school_id = r.school_id AND a.class_id = s.class_id
+                WHERE a.school_id = r.school_id AND a.class_id = r.class_id
                   AND a.subject = r.subject AND a.term = r.term
               ) AS class_assessments
        FROM results r
@@ -234,8 +235,6 @@ const recordResult = async (req, res, next) => {
        FROM students WHERE id = $1 AND school_id = $5
        ON CONFLICT (student_id, subject, term) 
        DO UPDATE SET exam_score = EXCLUDED.exam_score,
-                     class_id = EXCLUDED.class_id,
-                     curriculum = EXCLUDED.curriculum,
                      score = results.class_score + EXCLUDED.exam_score,
                      is_published = FALSE,
                      published_at = NULL
@@ -259,7 +258,7 @@ const getReportCard = async (req, res, next) => {
     // 1. Get Student & Class Info
     const studentRes = await pool.query(`
       SELECT s.name, LPAD(s.id::text, 6, '0') as student_id, c.name as class_name, c.id as class_id,
-             c.year_level as class_year_level, c.teaching_model as class_teaching_model,
+             c.year_level as class_year_level, c.curriculum, c.teaching_model as class_teaching_model,
              sch.name as school_name, sch.logo_url, sch.address, sch.phone, sch.motto
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
@@ -269,18 +268,38 @@ const getReportCard = async (req, res, next) => {
     
     if (!studentRes.rows.length) return res.status(404).json({ message: 'Student not found.' });
     const student = studentRes.rows[0];
+    student.class_name = canonicalClassName(student.class_name, student.class_year_level, student.curriculum);
+    const snapshotRes = await pool.query(
+      `SELECT class_id, class_name_snapshot, year_level_snapshot, curriculum,
+              academic_year_snapshot
+       FROM results
+       WHERE student_id = $1 AND school_id = $2 AND term = $3
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [studentId, school_id, term]
+    );
+    const reportSnapshot = snapshotRes.rows[0];
+    const reportClassId = reportSnapshot?.class_id ?? student.class_id;
+    if (reportSnapshot) {
+      student.class_name = reportSnapshot.class_name_snapshot || student.class_name;
+      student.class_year_level = reportSnapshot.year_level_snapshot ?? student.class_year_level;
+      student.curriculum = reportSnapshot.curriculum;
+      student.academic_year = reportSnapshot.academic_year_snapshot;
+    }
 
     // 2. Get Subject Results with Rank
     const subjectsRes = await pool.query(`
       WITH RankedResults AS (
         SELECT r.id, r.student_id, r.subject, r.class_score, r.exam_score, r.score,
+               r.class_name_snapshot, r.year_level_snapshot, r.curriculum,
+               r.academic_year_snapshot,
                RANK() OVER (PARTITION BY r.subject ORDER BY r.score DESC) as subject_rank,
                COUNT(*) OVER (PARTITION BY r.subject) as total_students
-        FROM results r JOIN students st ON r.student_id = st.id
-        WHERE r.term = $1 AND r.school_id = $2 AND st.class_id = $3
+        FROM results r
+        WHERE r.term = $1 AND r.school_id = $2 AND r.class_id = $3
       )
       SELECT * FROM RankedResults WHERE student_id = $4 ORDER BY subject
-    `, [term, school_id, student.class_id, studentId]);
+    `, [term, school_id, reportClassId, studentId]);
 
     // 3. Get Class Rank & Overall Average
     const classRankRes = await pool.query(`
@@ -288,12 +307,12 @@ const getReportCard = async (req, res, next) => {
         SELECT r.student_id, AVG(r.score) as term_average,
                RANK() OVER (ORDER BY AVG(r.score) DESC) as class_rank,
                COUNT(*) OVER () as total_in_class
-        FROM results r JOIN students st ON r.student_id = st.id
-        WHERE r.term = $1 AND r.school_id = $2 AND st.class_id = $3
+        FROM results r
+        WHERE r.term = $1 AND r.school_id = $2 AND r.class_id = $3
         GROUP BY r.student_id
       )
       SELECT * FROM StudentAverages WHERE student_id = $4
-    `, [term, school_id, student.class_id, studentId]);
+    `, [term, school_id, reportClassId, studentId]);
 
     // 4. Get Performance Trends
     const trendsRes = await pool.query(`

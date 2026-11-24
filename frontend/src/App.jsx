@@ -29,8 +29,9 @@ import FinanceAudit from './pages/FinanceAudit';
 import Feeding from './pages/Feeding';
 import PaymentReceipt from './pages/PaymentReceipt';
 import OperationsRegisters from './pages/OperationsRegisters';
-import { ParentPortalLayout, ParentDashboard, ParentFees, ParentFeeding, ParentResults, ParentAttendance, ParentTimetable, ParentAnnouncements, ParentCommunication, ParentNotifications, ParentProfile } from './pages/ParentPortal';
+import { ParentPortalLayout, ParentDashboard, ParentCurriculumSelection, ParentFees, ParentFeeding, ParentResults, ParentAttendance, ParentTimetable, ParentAnnouncements, ParentCommunication, ParentNotifications, ParentProfile } from './pages/ParentPortal';
 import ParentManagement from './pages/ParentManagement';
+import CurriculumSelectionsAdmin from './pages/CurriculumSelectionsAdmin';
 import {
   StudentPortalLayout, StudentDashboard, StudentProfile, StudentSubjects, StudentTimetable,
   StudentResults, StudentAttendance, StudentAnnouncements, StudentNotifications,
@@ -120,6 +121,7 @@ function App() {
       </Route>
       <Route path="/parent" element={<ProtectedRoute><ParentRoute><ParentPortalLayout /></ParentRoute></ProtectedRoute>}>
         <Route index element={<ParentDashboard />} />
+        <Route path="curriculum" element={<ParentCurriculumSelection />} />
         <Route path="fees" element={<ParentFees />} />
         <Route path="feeding" element={<ParentFeeding />} />
         <Route path="results" element={<ParentResults />} />
@@ -151,6 +153,7 @@ function App() {
         <Route path="announcements" element={<Announcements />} />
         <Route path="users" element={<Users />} />
         <Route path="parents" element={<AllowedRoles roles={['admin']}><ParentManagement /></AllowedRoles>} />
+        <Route path="curriculum-selections" element={<AllowedRoles roles={['admin']}><CurriculumSelectionsAdmin /></AllowedRoles>} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

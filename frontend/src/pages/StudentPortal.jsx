@@ -5,6 +5,7 @@ import {
   LogOut, Megaphone, Bell, UserRound, LibraryBig, KeyRound, Menu, X,
 } from 'lucide-react';
 import api from '../api/api';
+import { classStageLabel, curriculumLabel } from '../curriculumDisplay';
 import { getNotifications, markAllNotificationsAsRead, markNotificationAsRead } from '../api/notifications';
 import { changePassword } from '../api/users';
 
@@ -122,8 +123,8 @@ export function StudentDashboard() {
     <PageFrame title={`Welcome, ${profile.name}`} description="Your personal school overview.">
       <section className="stats-grid">
         <Card label="Student ID" value={profile.student_id} note="Admission number" />
-        <Card label="Class" value={profile.class_name || 'Not assigned'} note={profile.year_level ? `Year ${profile.year_level}` : ''} />
-        <Card label="Curriculum" value={profile.curriculum === 'PEARSON' ? 'Pearson' : profile.curriculum || 'Unassigned'} note="Your assigned pathway" />
+        <Card label="Class" value={profile.class_name || 'Not assigned'} note={classStageLabel(profile.year_level, profile.curriculum)} />
+        <Card label="Curriculum" value={curriculumLabel(profile.curriculum)} note="Your assigned pathway" />
         <Card label="Attendance" value={`${data.attendance_percentage}%`} note="Present and late records" />
       </section>
       <section className="split-layout">
@@ -158,8 +159,8 @@ export function StudentProfile() {
       <div className="sidebar-avatar" style={{ width: 64, height: 64, fontSize: 28 }}>{data.name?.slice(0, 1)?.toUpperCase()}</div>
       <div className="table-wrap"><table><tbody>
         <tr><th>Full name</th><td>{data.name}</td></tr><tr><th>Student ID</th><td>{data.student_id}</td></tr>
-        <tr><th>Date of birth</th><td>{data.dob || 'Not recorded'}</td></tr><tr><th>Class / year</th><td>{data.class_name || 'Not assigned'}{data.year_level ? ` · Year ${data.year_level}` : ''}</td></tr>
-        <tr><th>Curriculum</th><td>{data.curriculum === 'PEARSON' ? 'Pearson' : data.curriculum || 'Unassigned'}</td></tr>
+        <tr><th>Date of birth</th><td>{data.dob || 'Not recorded'}</td></tr><tr><th>Class / year</th><td>{data.class_name || 'Not assigned'}</td></tr>
+        <tr><th>Curriculum</th><td>{curriculumLabel(data.curriculum)}</td></tr>
         <tr><th>Parent / guardians</th><td>{data.guardians?.length ? data.guardians.map((guardian) => `${guardian.name}${guardian.relationship ? ` (${guardian.relationship})` : ''}${guardian.phone ? ` · ${guardian.phone}` : ''}`).join('; ') : 'Not recorded'}</td></tr>
       </tbody></table></div>
       <p>For corrections to official details, contact the school administrator.</p>

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { canonicalClassName } = require('../services/curriculumPolicy');
 
 const getSummary = async (req, res, next) => {
   const { school_id } = req.user; // From auth middleware
@@ -58,36 +59,37 @@ const getSummary = async (req, res, next) => {
 
     // 2. Top-performing Classes
     const topClassesResult = await pool.query(
-      `SELECT c.name, ROUND(AVG(r.score), 2) as avg_score 
+      `SELECT c.name, c.year_level, c.curriculum, ROUND(AVG(r.score), 2) as avg_score
        FROM results r 
        JOIN students s ON r.student_id = s.id 
        JOIN classes c ON s.class_id = c.id 
        WHERE r.school_id = $1 
-       GROUP BY c.id, c.name 
+       GROUP BY c.id, c.name, c.year_level, c.curriculum
        ORDER BY avg_score DESC LIMIT 5`,
       [school_id]
     );
 
     // 3. Top-performing Students
     const topStudentsResult = await pool.query(
-      `SELECT s.name, c.name as class_name, ROUND(AVG(r.score), 2) as avg_score 
+      `SELECT s.name, c.name as class_name, c.year_level, c.curriculum,
+              ROUND(AVG(r.score), 2) as avg_score
        FROM results r 
        JOIN students s ON r.student_id = s.id 
        LEFT JOIN classes c ON s.class_id = c.id 
        WHERE r.school_id = $1 
-       GROUP BY s.id, s.name, c.name 
+       GROUP BY s.id, s.name, c.name, c.year_level, c.curriculum
        ORDER BY avg_score DESC LIMIT 5`,
       [school_id]
     );
 
     // 4. Students At Risk (Most Absences)
     const atRiskResult = await pool.query(
-      `SELECT s.name, c.name as class_name, COUNT(*) as absences 
+      `SELECT s.name, c.name as class_name, c.year_level, c.curriculum, COUNT(*) as absences
        FROM attendance a 
        JOIN students s ON a.student_id = s.id 
        LEFT JOIN classes c ON s.class_id = c.id 
        WHERE a.school_id = $1 AND a.status = 'absent' 
-       GROUP BY s.id, s.name, c.name 
+       GROUP BY s.id, s.name, c.name, c.year_level, c.curriculum
        ORDER BY absences DESC LIMIT 5`,
       [school_id]
     );
@@ -110,9 +112,18 @@ const getSummary = async (req, res, next) => {
       totalFeesCollected,
       attendanceToday,
       feeTrends: feeTrendsResult.rows,
-      topClasses: topClassesResult.rows,
-      topStudents: topStudentsResult.rows,
-      atRiskStudents: atRiskResult.rows,
+      topClasses: topClassesResult.rows.map((row) => ({
+        ...row,
+        name: canonicalClassName(row.name, row.year_level, row.curriculum),
+      })),
+      topStudents: topStudentsResult.rows.map((row) => ({
+        ...row,
+        class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum),
+      })),
+      atRiskStudents: atRiskResult.rows.map((row) => ({
+        ...row,
+        class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum),
+      })),
       attendanceTrends: attendanceTrendsResult.rows
     });
   } catch (error) {

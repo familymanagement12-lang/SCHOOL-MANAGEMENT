@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { canonicalClassName } = require('../services/curriculumPolicy');
 
 const getStudent = async (userId, schoolId) => {
   const result = await pool.query(
@@ -13,7 +14,12 @@ const getStudent = async (userId, schoolId) => {
      WHERE s.user_id = $1 AND s.school_id = $2`,
     [userId, schoolId]
   );
-  return result.rows[0] || null;
+  const student = result.rows[0];
+  if (!student) return null;
+  return {
+    ...student,
+    class_name: canonicalClassName(student.class_name, student.year_level, student.curriculum),
+  };
 };
 
 const requireStudent = async (req, res) => {

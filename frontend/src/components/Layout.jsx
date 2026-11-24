@@ -17,6 +17,7 @@ function Layout() {
     '/results': 'Results', '/timetable': 'Term timetable', '/users': 'Accounts & roles',
     '/announcements': 'Announcements', '/fees': 'Fees', '/transactions': 'Finance', '/finance-audit': 'Finance audit trail',
     '/employees': 'Staff', '/payroll': 'Payroll', '/settings': 'Settings',
+    '/curriculum-selections': 'Curriculum selections',
   };
 
   useEffect(() => {

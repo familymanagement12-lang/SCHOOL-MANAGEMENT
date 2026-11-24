@@ -36,6 +36,7 @@ const sections = [
       { path: '/payroll', label: 'Payroll', icon: Activity, roles: ['admin', 'accountant'] },
       { path: '/users', label: 'Teachers & roles', icon: Users, roles: ['admin', 'teacher'] },
       { path: '/parents', label: 'Parent accounts', icon: Users, roles: ['admin'] },
+      { path: '/curriculum-selections', label: 'Curriculum selections', icon: GraduationCap, roles: ['admin'] },
       { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
     ],
   },
