@@ -29,6 +29,8 @@ import FinanceAudit from './pages/FinanceAudit';
 import Feeding from './pages/Feeding';
 import PaymentReceipt from './pages/PaymentReceipt';
 import OperationsRegisters from './pages/OperationsRegisters';
+import { ParentPortalLayout, ParentDashboard, ParentFees, ParentFeeding, ParentResults, ParentAttendance, ParentTimetable, ParentAnnouncements, ParentCommunication, ParentNotifications, ParentProfile } from './pages/ParentPortal';
+import ParentManagement from './pages/ParentManagement';
 import {
   StudentPortalLayout, StudentDashboard, StudentProfile, StudentSubjects, StudentTimetable,
   StudentResults, StudentAttendance, StudentAnnouncements, StudentNotifications,
@@ -48,6 +50,7 @@ const StaffRoute = ({ children }) => {
   const { pathname } = useLocation();
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
   if (user?.role === 'student') return <Navigate to="/student" replace />;
+  if (user?.role === 'parent') return <Navigate to="/parent" replace />;
   if (user?.role === 'accountant'
       && !['/', '/fees', '/feeding', '/operations', '/transactions', '/finance-audit', '/payroll'].includes(pathname)
       && !pathname.startsWith('/receipt/')
@@ -61,6 +64,12 @@ const StudentRoute = ({ children }) => {
   let user;
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
   return user?.role === 'student' ? children : <Navigate to="/" replace />;
+};
+
+const ParentRoute = ({ children }) => {
+  let user;
+  try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
+  return user?.role === 'parent' ? children : <Navigate to="/" replace />;
 };
 
 const AllowedRoles = ({ roles, children }) => {
@@ -77,6 +86,7 @@ const RoleBasedDashboard = () => {
   const role = user?.role;
 
   if (role === 'student') return <Navigate to="/student" replace />;
+  if (role === 'parent') return <Navigate to="/parent" replace />;
   if (role === 'accountant') return <FinanceDashboard />;
   if (role === 'feeding_tuckshop_officer') return <Feeding />;
   if (role === 'teacher') return <TeacherDashboard />;
@@ -108,6 +118,18 @@ function App() {
         <Route path="notifications" element={<StudentNotifications />} />
         <Route path="account" element={<StudentAccountSettings />} />
       </Route>
+      <Route path="/parent" element={<ProtectedRoute><ParentRoute><ParentPortalLayout /></ParentRoute></ProtectedRoute>}>
+        <Route index element={<ParentDashboard />} />
+        <Route path="fees" element={<ParentFees />} />
+        <Route path="feeding" element={<ParentFeeding />} />
+        <Route path="results" element={<ParentResults />} />
+        <Route path="attendance" element={<ParentAttendance />} />
+        <Route path="timetable" element={<ParentTimetable />} />
+        <Route path="announcements" element={<ParentAnnouncements />} />
+        <Route path="contact" element={<ParentCommunication />} />
+        <Route path="notifications" element={<ParentNotifications />} />
+        <Route path="profile" element={<ParentProfile />} />
+      </Route>
       <Route path="/" element={<ProtectedRoute><StaffRoute><Layout /></StaffRoute></ProtectedRoute>}>
         <Route index element={<RoleBasedDashboard />} />
         <Route path="students" element={<Students />} />
@@ -128,6 +150,7 @@ function App() {
         <Route path="ai" element={<McCarthyAI />} />
         <Route path="announcements" element={<Announcements />} />
         <Route path="users" element={<Users />} />
+        <Route path="parents" element={<AllowedRoles roles={['admin']}><ParentManagement /></AllowedRoles>} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

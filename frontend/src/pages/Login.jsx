@@ -27,6 +27,8 @@ function Login() {
       setAuthToken(token);
 
       if (user?.must_change_password) navigate('/change-password');
+      else if (user?.role === 'parent') navigate('/parent');
+      else if (user?.role === 'student') navigate('/student');
       else navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
@@ -66,7 +68,7 @@ function Login() {
 
           <form onSubmit={handleSubmit}>
             <div className="auth-input-group">
-              <label htmlFor="login-identifier">Email or Student ID</label>
+              <label htmlFor="login-identifier">Email, registered phone, or Student ID</label>
               <input
                 id="login-identifier"
                 value={email}
@@ -74,7 +76,7 @@ function Login() {
                 type="text"
                 autoComplete="username"
                 required
-                placeholder="name@school.edu or 000123"
+                placeholder="Email, phone number, or 000123"
               />
             </div>
 

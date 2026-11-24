@@ -41,6 +41,17 @@ const login = async (req, res, next) => {
              AND LPAD(s.id::text, 6, '0') = LPAD($1, 6, '0')
              AND $1 ~ '^[0-9]{1,6}$'
          ))
+         OR (u.role = 'parent' AND EXISTS (
+           SELECT 1 FROM parents p
+           WHERE p.user_id = u.id AND p.school_id = u.school_id
+             AND regexp_replace(COALESCE(p.phone, ''), '[^0-9]', '', 'g')
+                 = regexp_replace($1, '[^0-9]', '', 'g')
+             AND regexp_replace($1, '[^0-9]', '', 'g') <> ''
+             AND (SELECT COUNT(DISTINCT p2.user_id) FROM parents p2
+                  WHERE p2.school_id = u.school_id
+                    AND regexp_replace(COALESCE(p2.phone, ''), '[^0-9]', '', 'g')
+                        = regexp_replace($1, '[^0-9]', '', 'g')) = 1
+         ))
       LIMIT 1
     `, [String(loginIdentifier).trim()]);
     const user = userResult.rows[0];

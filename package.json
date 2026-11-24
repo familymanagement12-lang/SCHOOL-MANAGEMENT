@@ -19,6 +19,7 @@
     "db:migrate:feeding-officer-audit-edit": "node scripts/migrate_feeding_officer_audit_edit.js",
     "db:migrate:accountant-rls": "node scripts/migrate_accountant_rls_audit.js",
     "db:migrate:feeding": "node scripts/migrate_compulsory_feeding.js",
+    "db:migrate:parent-portal": "node scripts/migrate_parent_portal.js",
     "db:migrate:timetable": "node scripts/migrate_timetable.js",
     "admin:seed": "node scripts/seed_admin.js",
     "demo:school": "node scripts/demo_school_seed.js",

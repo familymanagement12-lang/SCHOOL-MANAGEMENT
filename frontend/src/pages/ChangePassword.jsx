@@ -24,7 +24,7 @@ function ChangePassword() {
       
       // Update local storage so the system knows they have changed their password
       localStorage.setItem('user', JSON.stringify(response.data));
-      navigate('/');
+      navigate(response.data?.role === 'parent' ? '/parent' : response.data?.role === 'student' ? '/student' : '/');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update password');
     }

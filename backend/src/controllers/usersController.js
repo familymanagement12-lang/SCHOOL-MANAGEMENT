@@ -10,7 +10,7 @@ const getUsers = async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT u.id, u.name, u.email, u.role, u.is_active, u.created_at, u.subjects
-       FROM users u WHERE u.school_id = $1 ORDER BY u.created_at DESC`,
+       FROM users u WHERE u.school_id = $1 AND u.role <> 'parent' ORDER BY u.created_at DESC`,
       [school_id]
     );
     res.json(result.rows);
