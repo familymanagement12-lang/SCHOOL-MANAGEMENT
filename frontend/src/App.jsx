@@ -64,6 +64,7 @@ const StaffRoute = ({ children }) => {
 const StudentRoute = ({ children }) => {
   let user;
   try { user = JSON.parse(localStorage.getItem('user') || 'null'); } catch { user = null; }
+  if (user?.role === 'student' && user?.must_change_password) return <Navigate to="/change-password" replace />;
   return user?.role === 'student' ? children : <Navigate to="/" replace />;
 };
 

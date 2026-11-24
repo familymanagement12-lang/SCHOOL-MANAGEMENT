@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { canonicalClassName } = require('../services/curriculumPolicy');
+const { makeUniqueUsername, generateTemporaryPassword } = require('../services/studentUsernameService');
 
 const withCanonicalClassName = (student) => ({
   ...student,
@@ -17,7 +18,6 @@ const studentSelect = `
     s.id,
     LPAD(s.id::text, 6, '0') AS student_id,
     s.name,
-    TO_CHAR(s.dob, 'YYYY-MM-DD') AS dob,
     s.allergies,
     s.disability,
     s.class_id,
@@ -26,7 +26,10 @@ const studentSelect = `
     c.curriculum AS class_curriculum,
     c.year_level,
     u.is_active AS account_active,
-    u.id AS account_user_id
+    u.id AS account_user_id,
+    u.username,
+    u.must_change_password,
+    u.last_login_at
   FROM students s
   LEFT JOIN classes c ON s.class_id = c.id
   LEFT JOIN users u ON u.id = s.user_id AND u.school_id = s.school_id
@@ -94,7 +97,7 @@ const getStudentById = async (req, res, next) => {
 
   try {
     const result = await pool.query(
-      `${studentSelect} WHERE s.id = $1 AND s.school_id = $2`,
+      `${studentSelect.replace("    s.name,\n", "    s.name,\n    TO_CHAR(s.dob, 'YYYY-MM-DD') AS dob,\n")} WHERE s.id = $1 AND s.school_id = $2`,
       [id, school_id]
     );
 
@@ -136,22 +139,39 @@ const createStudent = async (req, res, next) => {
       );
       const newStudent = result.rows[0];
 
-      const studentPassword = crypto.randomBytes(4).toString('hex');
-      const hashedStudentPassword = await bcrypt.hash(studentPassword, 10);
+      const username = await makeUniqueUsername(client, school_id, name);
+      if (!username) throw new Error('Unable to generate a personalised username.');
+      const password = generateTemporaryPassword(dob);
+      const hashedStudentPassword = await bcrypt.hash(password.temporaryPassword, 10);
       const studentEmail = `stu_${newStudent.student_id}_${crypto.randomBytes(2).toString('hex')}@educore.local`;
 
       const studentUserRes = await client.query(
-        'INSERT INTO users (school_id, name, email, password, role, must_change_password, email_verified) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-        [school_id, name, studentEmail, hashedStudentPassword, 'student', true, true]
+        `INSERT INTO users
+           (school_id, name, email, password, role, must_change_password, email_verified, is_active, username)
+         VALUES ($1,$2,$3,$4,'student',TRUE,FALSE,FALSE,$5)
+         RETURNING id`,
+        [school_id, name, studentEmail, hashedStudentPassword, username]
       );
 
       await client.query('UPDATE students SET user_id = $1 WHERE id = $2', [studentUserRes.rows[0].id, newStudent.id]);
+      await client.query(
+        `INSERT INTO student_portal_audit_log
+           (school_id, student_id, actor_id, action, details)
+         VALUES ($1,$2,$3,'ACCOUNT_CREATED',$4::jsonb)`,
+        [school_id, newStudent.id, req.user.id, JSON.stringify({
+          username,
+          temporary_password_source: password.source,
+        })]
+      );
 
       await client.query('COMMIT');
       res.status(201).json({
         ...newStudent,
+        name: newStudent.name,
         class_name: canonicalClassName(assignedClass?.name, assignedClass?.year_level, assignedClass?.curriculum),
-        studentPassword,
+        username,
+        studentPassword: password.temporaryPassword,
+        account_requires_activation: true,
       });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -260,30 +280,65 @@ const resetStudentAccountPassword = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const account = await client.query(
-      `SELECT s.id AS student_id, LPAD(s.id::text, 6, '0') AS student_id_label, u.id AS user_id
-       FROM students s JOIN users u ON u.id = s.user_id AND u.school_id = s.school_id
-       WHERE s.id = $1 AND s.school_id = $2 AND u.role = 'student'
-       FOR UPDATE OF u`,
+      `SELECT s.id AS student_id, s.name, s.dob,
+              LPAD(s.id::text, 6, '0') AS student_id_label,
+              u.id AS user_id, u.username
+       FROM students s
+       LEFT JOIN users u ON u.id=s.user_id AND u.school_id=s.school_id AND u.role='student'
+       WHERE s.id=$1 AND s.school_id=$2
+       FOR UPDATE OF s`,
       [id, school_id]
     );
     if (!account.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Student account not found.' });
     }
-    const temporaryPassword = crypto.randomBytes(6).toString('base64url');
+    const student = account.rows[0];
+    let userId = student.user_id;
+    let username = student.username;
+    if (!username) {
+      username = await makeUniqueUsername(client, school_id, student.name);
+      if (!username) throw new Error('Unable to generate a personalised username.');
+    }
+    const password = generateTemporaryPassword(student.dob);
+    const temporaryPassword = password.temporaryPassword;
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
-    await client.query(
-      'UPDATE users SET password = $1, must_change_password = TRUE WHERE id = $2',
-      [hashedPassword, account.rows[0].user_id]
-    );
+    if (!userId) {
+      const studentEmail = `stu_${student.student_id_label}_${crypto.randomBytes(2).toString('hex')}@educore.local`;
+      const created = await client.query(
+        `INSERT INTO users
+           (school_id,name,email,password,role,must_change_password,email_verified,is_active,username)
+         VALUES ($1,$2,$3,$4,'student',TRUE,FALSE,FALSE,$5)
+         RETURNING id`,
+        [school_id, student.name, studentEmail, hashedPassword, username]
+      );
+      userId = created.rows[0].id;
+      await client.query('UPDATE students SET user_id=$1 WHERE id=$2 AND school_id=$3', [userId, student.student_id, school_id]);
+      await client.query(
+        `INSERT INTO student_portal_audit_log
+           (school_id,student_id,actor_id,action,details)
+         VALUES ($1,$2,$3,'ACCOUNT_CREATED',$4::jsonb)`,
+        [school_id, student.student_id, actorId, JSON.stringify({ username, temporary_password_source: password.source })]
+      );
+    } else {
+      await client.query(
+        `UPDATE users
+         SET password=$1, must_change_password=TRUE,
+             username=$2, session_version=session_version+1
+         WHERE id=$3 AND school_id=$4 AND role='student'`,
+        [hashedPassword, username, userId, school_id]
+      );
+    }
     await client.query(
       `INSERT INTO student_portal_audit_log (school_id, student_id, actor_id, action)
        VALUES ($1, $2, $3, 'PASSWORD_RESET')`,
-      [school_id, account.rows[0].student_id, actorId]
+      [school_id, student.student_id, actorId]
     );
     await client.query('COMMIT');
     res.json({
-      student_id: account.rows[0].student_id_label,
+      student_id: student.student_id_label,
+      name: student.name,
+      username,
       temporary_password: temporaryPassword,
       must_change_password: true,
     });
@@ -328,22 +383,40 @@ const bulkCreateStudents = async (req, res, next) => {
           [school_id, normalizedClassId, name, dob || null, allergies || null, disability || null]
         );
         const newStudent = result.rows[0];
-
-        const studentPassword = crypto.randomBytes(4).toString('hex');
-        const hashedStudentPassword = await bcrypt.hash(studentPassword, 10);
+        const username = await makeUniqueUsername(client, school_id, name);
+        if (!username) continue;
+        const password = generateTemporaryPassword(dob);
+        const hashedStudentPassword = await bcrypt.hash(password.temporaryPassword, 10);
         const studentEmail = `stu_${newStudent.student_id}_${crypto.randomBytes(2).toString('hex')}@educore.local`;
 
         const studentUserRes = await client.query(
-          'INSERT INTO users (school_id, name, email, password, role, must_change_password, email_verified) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-          [school_id, name, studentEmail, hashedStudentPassword, 'student', true, true]
+          `INSERT INTO users
+             (school_id,name,email,password,role,must_change_password,email_verified,is_active,username)
+           VALUES ($1,$2,$3,$4,'student',TRUE,FALSE,FALSE,$5)
+           RETURNING id`,
+          [school_id, name, studentEmail, hashedStudentPassword, username]
         );
 
         await client.query('UPDATE students SET user_id = $1 WHERE id = $2', [studentUserRes.rows[0].id, newStudent.id]);
-        createdStudents.push(newStudent);
+        createdStudents.push({
+          ...newStudent,
+          name: newStudent.name,
+          username,
+          temporary_password: password.temporaryPassword,
+        });
       }
 
       await client.query('COMMIT');
-      res.status(201).json({ message: `Successfully added ${createdStudents.length} students.`, students: createdStudents });
+      res.status(201).json({
+        message: `Successfully added ${createdStudents.length} students.`,
+        students: createdStudents,
+        credentials: createdStudents.map((student) => ({
+          student_id: student.student_id,
+          name: student.name,
+          username: student.username,
+          temporary_password: student.temporary_password,
+        })),
+      });
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

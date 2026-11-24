@@ -68,7 +68,7 @@ function Login() {
 
           <form onSubmit={handleSubmit}>
             <div className="auth-input-group">
-              <label htmlFor="login-identifier">Email, registered phone, or Student ID</label>
+              <label htmlFor="login-identifier">Username, email, or registered phone</label>
               <input
                 id="login-identifier"
                 value={email}
@@ -76,7 +76,7 @@ function Login() {
                 type="text"
                 autoComplete="username"
                 required
-                placeholder="Email, phone number, or 000123"
+                placeholder="Personalised username or email"
               />
             </div>
 

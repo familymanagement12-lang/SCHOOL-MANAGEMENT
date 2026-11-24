@@ -88,6 +88,9 @@ test('parent login accepts the registered phone identifier', async () => {
   const password = await bcrypt.hash('safe-test-password', 4);
   let loginQuery = '';
   pool.query = async (sql, values) => {
+    if (/UPDATE users SET last_login_at/.test(sql)) {
+      return { rowCount: 1, rows: [] };
+    }
     loginQuery = sql;
     assert.deepEqual(values, ['+1 (415) 555-0199']);
     return {

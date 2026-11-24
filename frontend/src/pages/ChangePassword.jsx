@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { changePassword } from '../api/users';
+import { login } from '../api/auth';
+import { setAuthToken } from '../api/api';
 
 function ChangePassword() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -18,12 +21,28 @@ function ChangePassword() {
     if (newPassword !== confirmPassword) {
       return setError('Passwords do not match');
     }
+    if (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      return setError('Password must include letters and numbers.');
+    }
 
     try {
-      const response = await changePassword({ newPassword });
-      
-      // Update local storage so the system knows they have changed their password
-      localStorage.setItem('user', JSON.stringify(response.data));
+      const response = await changePassword({ currentPassword, newPassword });
+      const updatedUser = response.data;
+      let loginPayload = null;
+      try {
+        const storedUser = JSON.parse(localStorage.getItem('user') || 'null');
+        loginPayload = storedUser?.username || storedUser?.email;
+      } catch {
+        loginPayload = null;
+      }
+      if (loginPayload) {
+        const loginResponse = await login({ identifier: loginPayload, password: newPassword });
+        localStorage.setItem('sms_token', loginResponse.data.token);
+        localStorage.setItem('user', JSON.stringify(loginResponse.data.user));
+        setAuthToken(loginResponse.data.token);
+      } else {
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
       navigate(response.data?.role === 'parent' ? '/parent' : response.data?.role === 'student' ? '/student' : '/');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update password');
@@ -40,6 +59,11 @@ function ChangePassword() {
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {error && <div className="error" style={{ background: '#fef2f2', color: '#991b1b', padding: '0.75rem 1rem', borderRadius: '8px', textAlign: 'center' }}>{error}</div>}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: '600', color: '#334155' }}>Current Temporary Password</label>
+            <input value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} type="password" autoComplete="current-password" required style={{ padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #cbd5e1', width: '100%' }} />
+          </div>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <label style={{ fontSize: '0.875rem', fontWeight: '600', color: '#334155' }}>New Password</label>

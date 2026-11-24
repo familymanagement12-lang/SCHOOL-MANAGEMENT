@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS users (
   subjects TEXT[] DEFAULT '{}',
   email_verified BOOLEAN DEFAULT FALSE,
   verification_token TEXT,
+  username TEXT,
+  last_login_at TIMESTAMP WITH TIME ZONE,
+  password_changed_at TIMESTAMP WITH TIME ZONE,
+  session_version INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

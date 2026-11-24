@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getClasses } from '../api/classes';
 import {
-  getStudents, createStudent, updateStudent, deleteStudent,
+  getStudents, getStudentById, createStudent, updateStudent, deleteStudent,
   setStudentAccountStatus, resetStudentAccountPassword,
 } from '../api/students';
 import BulkStudentUploader from '../components/BulkStudentUploader';
@@ -34,6 +34,7 @@ function Students() {
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
+  const [accountFilter, setAccountFilter] = useState('');
   const [formData, setFormData] = useState(emptyForm);
   const isAdmin = isCurrentUserAdmin();
 
@@ -64,26 +65,39 @@ function Students() {
       const matchesSearch = !query
         || student.name.toLowerCase().includes(query)
         || student.student_id?.includes(query)
+          || student.username?.toLowerCase().includes(query)
         || student.class_name?.toLowerCase().includes(query);
       const matchesClass = !classFilter || String(student.class_id || '') === classFilter;
+        const matchesAccount = !accountFilter
+          || (accountFilter === 'active' && student.account_user_id && student.account_active)
+          || (accountFilter === 'inactive' && student.account_user_id && !student.account_active)
+          || (accountFilter === 'missing' && !student.account_user_id)
+          || (accountFilter === 'change' && student.must_change_password);
 
-      return matchesSearch && matchesClass;
+        return matchesSearch && matchesClass && matchesAccount;
     });
-  }, [students, searchTerm, classFilter]);
+  }, [students, searchTerm, classFilter, accountFilter]);
 
   const assignedStudents = students.filter((student) => student.class_id).length;
   const unassignedStudents = students.length - assignedStudents;
 
-  const handleOpenModal = (student = null) => {
+  const handleOpenModal = async (student = null) => {
     if (student) {
-      setEditingId(student.id);
-      setFormData({
-        name: student.name,
-        class_id: student.class_id || '',
-        dob: student.dob || '',
-        allergies: student.allergies || '',
-        disability: student.disability || '',
-      });
+      try {
+        const response = await getStudentById(student.id);
+        const detail = response.data;
+        setEditingId(detail.id);
+        setFormData({
+          name: detail.name,
+          class_id: detail.class_id || '',
+          dob: detail.dob || '',
+          allergies: detail.allergies || '',
+          disability: detail.disability || '',
+        });
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to load student details.');
+        return;
+      }
     } else {
       setEditingId(null);
       setFormData(emptyForm);
@@ -114,6 +128,8 @@ function Students() {
         if (res.data.studentPassword) {
           setCredentialsModal({
             id: res.data.student_id,
+            name: res.data.name,
+            username: res.data.username,
             password: res.data.studentPassword,
           });
         }
@@ -152,7 +168,12 @@ function Students() {
     if (!window.confirm(`Reset the portal password for ${student.name}?`)) return;
     try {
       const { data } = await resetStudentAccountPassword(student.id);
-      setCredentialsModal({ id: data.student_id, password: data.temporary_password });
+      setCredentialsModal({
+        id: data.student_id,
+        name: data.name,
+        username: data.username,
+        password: data.temporary_password,
+      });
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reset student password.');
     }
@@ -204,6 +225,13 @@ function Students() {
                 <option key={classItem.id} value={classItem.id}>{classItem.name}</option>
               ))}
             </select>
+            <select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)}>
+              <option value="">All portal accounts</option>
+              <option value="active">Active accounts</option>
+              <option value="inactive">Inactive accounts</option>
+              <option value="missing">Missing accounts</option>
+              <option value="change">Must change password</option>
+            </select>
           </div>
 
           {error && <div className="error">{error}</div>}
@@ -217,7 +245,9 @@ function Students() {
                   <th>Class</th>
                   <th>Curriculum</th>
                   <th>Portal account</th>
-                  <th>Date of Birth</th>
+                  <th>Username</th>
+                  <th>First-login change</th>
+                  <th>Last login</th>
                   <th>Allergies</th>
                   <th>Disability / Needs</th>
                   <th>Actions</th>
@@ -233,16 +263,20 @@ function Students() {
                     <td>{student.class_name || 'Unassigned'}</td>
                     <td>{student.curriculum === 'PEARSON' ? 'Pearson' : student.curriculum || 'Unassigned'}</td>
                     <td>{student.account_user_id ? (student.account_active ? 'Active' : 'Inactive') : 'Not linked'}</td>
-                    <td>{student.dob || '-'}</td>
+                    <td><span style={{ fontWeight: 600, color: '#1e3a8a' }}>{student.username || '-'}</span></td>
+                    <td>{student.must_change_password ? 'Required' : 'Complete'}</td>
+                    <td>{student.last_login_at ? new Date(student.last_login_at).toLocaleString() : '-'}</td>
                     <td>{student.allergies ? student.allergies : 'None'}</td>
                     <td>{student.disability ? student.disability : 'None'}</td>
                     <td className="actions">
                       <button className="btn-small btn-edit" onClick={() => handleOpenModal(student)}>Edit</button>
                       {isAdmin && <Link className="btn-small btn-edit" to={`/feeding?student_id=${student.id}`}>Feeding account</Link>}
-                      {isAdmin && student.account_user_id && <>
+                      {isAdmin && student.account_user_id && (
                         <button className="btn-small btn-edit" onClick={() => handleAccountStatus(student)}>{student.account_active ? 'Deactivate portal' : 'Activate portal'}</button>
-                        <button className="btn-small btn-edit" onClick={() => handlePasswordReset(student)}>Reset password</button>
-                      </>}
+                      )}
+                      {isAdmin && (
+                        <button className="btn-small btn-edit" onClick={() => handlePasswordReset(student)}>{student.account_user_id ? 'Reset password' : 'Set up account'}</button>
+                      )}
                       <button className="btn-small btn-delete" onClick={() => handleDelete(student.id)}>Delete</button>
                     </td>
                   </tr>
@@ -322,6 +356,10 @@ function Students() {
             <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'left', marginBottom: '1.5rem' }}>
               <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#64748b' }}>Student ID:</p>
               <div style={{ fontWeight: '600', color: '#0f172a', marginBottom: '1rem', background: '#ffffff', padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}>{credentialsModal.id}</div>
+
+              {credentialsModal.name && <><p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#64748b' }}>Student Name:</p><div style={{ fontWeight: '600', color: '#0f172a', marginBottom: '1rem', background: '#ffffff', padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}>{credentialsModal.name}</div></>}
+
+              {credentialsModal.username && <><p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#64748b' }}>Username:</p><div style={{ fontWeight: '600', color: '#0f172a', marginBottom: '1rem', background: '#ffffff', padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}>{credentialsModal.username}</div></>}
               
               <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#64748b' }}>Temporary Password:</p>
               <div style={{ fontWeight: '600', color: '#0f172a', background: '#ffffff', padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1', letterSpacing: '1px' }}>{credentialsModal.password}</div>
@@ -340,7 +378,6 @@ function Students() {
             <BulkStudentUploader 
               onSuccess={() => { 
                 fetchPageData(); 
-                setShowBulkModal(false); 
               }} 
             />
           </div>

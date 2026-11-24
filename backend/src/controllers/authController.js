@@ -12,6 +12,7 @@ const createToken = (user) => {
       email: user.email,
       role: user.role,
       school_id: user.school_id,
+      session_version: user.session_version ?? 1,
     },
     process.env.JWT_SECRET,
     {
@@ -32,9 +33,11 @@ const login = async (req, res, next) => {
   try {
     const userResult = await pool.query(`
       SELECT u.id, u.email, u.password, u.role, u.school_id, u.name,
-             u.must_change_password, u.email_verified, u.is_active
+             u.username, u.must_change_password, u.email_verified, u.is_active,
+             u.session_version
       FROM users u
       WHERE lower(u.email) = lower($1)
+         OR (u.username IS NOT NULL AND lower(u.username) = lower($1))
          OR (u.role = 'student' AND EXISTS (
            SELECT 1 FROM students s
            WHERE s.user_id = u.id AND s.school_id = u.school_id
@@ -73,8 +76,13 @@ const login = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
+    await pool.query(
+      'UPDATE users SET last_login_at=NOW(), session_version=session_version WHERE id=$1 AND school_id=$2',
+      [user.id, user.school_id]
+    );
+
     const token = createToken(user);
-    res.json({ token, user: { id: user.id, email: user.email, role: user.role, school_id: user.school_id, name: user.name, must_change_password: user.must_change_password } });
+    res.json({ token, user: { id: user.id, email: user.email, username: user.username, role: user.role, school_id: user.school_id, name: user.name, must_change_password: user.must_change_password } });
   } catch (error) {
     next(error);
   }

@@ -11,6 +11,7 @@ const BulkStudentUploader = ({ onSuccess }) => {
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [credentials, setCredentials] = useState([]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -92,6 +93,7 @@ const BulkStudentUploader = ({ onSuccess }) => {
         });
 
         setMessage({ type: 'success', text: response.data.message || 'Students successfully uploaded!' });
+        setCredentials(Array.isArray(response.data.credentials) ? response.data.credentials : []);
         setFile(null); // Clear the file state
         setFileName('');
         if (fileInputRef.current) fileInputRef.current.value = ''; // Reset the input visually
@@ -211,6 +213,18 @@ const BulkStudentUploader = ({ onSuccess }) => {
       {message.text && (
         <div className={message.type === 'error' ? 'error' : 'success'} style={{ marginBottom: '15px', color: message.type === 'error' ? 'red' : 'green' }}>
           {message.text}
+        </div>
+      )}
+      {credentials.length > 0 && (
+        <div style={{ marginBottom: '1rem', maxHeight: '220px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.75rem' }}>
+          <strong>One-time student portal credentials</strong>
+          {credentials.map((credential) => (
+            <div key={credential.student_id} style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
+              <div><strong>{credential.name}</strong> · {credential.student_id}</div>
+              <div>Username: <strong>{credential.username}</strong></div>
+              <div>Temporary password: <strong>{credential.temporary_password}</strong></div>
+            </div>
+          ))}
         </div>
       )}
       <form onSubmit={handleBulkUpload}>

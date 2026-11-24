@@ -107,18 +107,54 @@ const createUser = async (req, res, next) => {
 
 const changePassword = async (req, res, next) => {
   const { id, school_id } = req.user;
-  const { newPassword } = req.body;
+  const { currentPassword, newPassword } = req.body;
 
   if (!newPassword || newPassword.length < 8) {
     return res.status(400).json({ message: 'Password must be at least 8 characters long.' });
   }
+  if (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    return res.status(400).json({ message: 'New password must include both letters and numbers.' });
+  }
 
   try {
+    const account = await pool.query(
+      'SELECT id, password, role, must_change_password FROM users WHERE id=$1 AND school_id=$2',
+      [id, school_id]
+    );
+    if (!account.rows.length) return res.status(404).json({ message: 'Account not found.' });
+
+    if (account.rows[0].must_change_password) {
+      if (!currentPassword) return res.status(400).json({ message: 'Current temporary password is required.' });
+      const matches = await bcrypt.compare(currentPassword, account.rows[0].password);
+      if (!matches) return res.status(401).json({ message: 'Current temporary password is incorrect.' });
+    } else if (currentPassword) {
+      const matches = await bcrypt.compare(currentPassword, account.rows[0].password);
+      if (!matches) return res.status(401).json({ message: 'Current password is incorrect.' });
+    }
+
+    const currentMatches = await bcrypt.compare(newPassword, account.rows[0].password);
+    if (currentMatches) {
+      return res.status(400).json({ message: 'New password must differ from the current or temporary password.' });
+    }
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await pool.query(
-      'UPDATE users SET password = $1, must_change_password = FALSE WHERE id = $2 AND school_id = $3',
+      `UPDATE users
+       SET password=$1, must_change_password=FALSE,
+           password_changed_at=NOW(), session_version=session_version+1
+       WHERE id=$2 AND school_id=$3`,
       [hashedPassword, id, school_id]
     );
+
+    if (account.rows[0].role === 'student') {
+      await pool.query(
+        `INSERT INTO student_portal_audit_log
+           (school_id,student_id,actor_id,action,details)
+         SELECT $1,s.id,$2,'PASSWORD_CHANGED','{}'::jsonb
+         FROM students s WHERE s.user_id=$2 AND s.school_id=$1`,
+        [school_id, id]
+      );
+    }
 
     const result = await pool.query('SELECT id, name, email, role, must_change_password FROM users WHERE id = $1', [id]);
     res.json(result.rows[0]);
