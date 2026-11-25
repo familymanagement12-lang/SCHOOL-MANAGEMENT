@@ -180,26 +180,33 @@ function Employees() {
         headers[extractCell(cell).toLowerCase()] = column;
       });
       const findColumn = (...names) => names.map((name) => headers[name.toLowerCase()]).find(Boolean);
-      const staffIdColumn = findColumn('Staff ID');
-      const nameColumn = findColumn('Employee Name');
-      if (!nameColumn) {
-        throw new Error('Required column is missing: Employee Name. Staff ID is optional.');
-      }
+      const readCell = (row, ...names) => {
+        const column = findColumn(...names);
+        return column ? extractCell(row.getCell(column)) : '';
+      };
+      const readDateCell = (row, ...names) => {
+        const column = findColumn(...names);
+        if (!column) return '';
+        const cell = row.getCell(column);
+        if (typeof cell.value === 'number' && Number.isFinite(cell.value) && cell.value > 0) {
+          const date = new Date(Date.UTC(1899, 11, 30) + Math.round(cell.value * 86400000));
+          return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+        }
+        return extractCell(cell);
+      };
       const staff = [];
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
-        const staffId = staffIdColumn ? extractCell(row.getCell(staffIdColumn)) : '';
-        const employeeName = extractCell(row.getCell(nameColumn));
         const employee = {
-          staff_id: staffId,
-          full_name: employeeName,
-          pension_member_id: extractCell(row.getCell(findColumn('Pension Fund Member ID') || 3)),
-          ssnit_number: extractCell(row.getCell(findColumn('SSNIT Number') || 4)),
-          date_of_birth: extractCell(row.getCell(findColumn('Date of Birth') || 5)),
-          phone: extractCell(row.getCell(findColumn('Phone Number') || 6)),
-          ghana_card: extractCell(row.getCell(findColumn('Ghana Card') || 7)),
-          employment_type: extractCell(row.getCell(findColumn('Employment Status') || 8)),
-          termination_date: extractCell(row.getCell(findColumn('Termination Date') || 9)),
+          staff_id: readCell(row, 'Staff ID'),
+          full_name: readCell(row, 'Employee Name', 'Full Name'),
+          pension_member_id: readCell(row, 'Pension Fund Member ID'),
+          ssnit_number: readCell(row, 'SSNIT Number'),
+          date_of_birth: readDateCell(row, 'Date of Birth', 'DOB'),
+          phone: readCell(row, 'Phone Number', 'Phone'),
+          ghana_card: readCell(row, 'Ghana Card'),
+          employment_type: readCell(row, 'Employment Status', 'Employment Type'),
+          termination_date: readDateCell(row, 'Termination Date'),
         };
         if (Object.values(employee).every((value) => !value)) return;
         staff.push(employee);
