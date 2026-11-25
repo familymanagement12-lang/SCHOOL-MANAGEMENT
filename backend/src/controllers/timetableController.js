@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { solveTimetable } = require('../services/timetableSolver');
+const { solveTimetable, getPeriodSlot, isWithinAvailabilityWindow } = require('../services/timetableSolver');
 const { canonicalClassName } = require('../services/curriculumPolicy');
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -341,7 +341,8 @@ const copyPreviousTerm = async (req, res, next) => {
 };
 
 const normalizeTime = (value) => String(value || '').slice(0, 5);
-const overlapsSql = '(start_time < $4::TIME AND end_time > $3::TIME)';
+const overlapsSql = '(t.start_time < $4::TIME AND t.end_time > $3::TIME)';
+const overlapsAvailabilitySql = '(a.start_time < $4::TIME AND a.end_time > $3::TIME)';
 
 const sameId = (a, b) => String(a || '') === String(b || '');
 
@@ -390,7 +391,21 @@ const resolveTeacherId = async (schoolId, termId, classId, subjectId, teacherId)
     : null;
 };
 
-const createConflict = (type, message, details = {}) => ({ type, message, details });
+const createConflict = (type, message, details = {}) => {
+  const warningTypes = new Set([
+    'DOUBLE_PERIOD_REQUIREMENT_MISSING',
+    'WEEKLY_REQUIREMENT_EXTRA',
+  ]);
+  const informationTypes = new Set([
+    'WEEKLY_REQUIREMENTS_MISSING',
+  ]);
+  const severity = warningTypes.has(type)
+    ? 'warning'
+    : informationTypes.has(type)
+      ? 'information'
+      : 'critical';
+  return { type, message, details, severity };
+};
 
 const calculateAvailableClassCapacity = (validDays, slots) => {
   const slotsByDay = new Map();
@@ -420,47 +435,75 @@ const getEntryContext = async (schoolId, entryId) => {
   return result.rows[0];
 };
 
+const isOutsideAvailableWindow = async (table, ownerColumn, schoolId, ownerId, termId, day, startTime, endTime) => {
+  const result = await pool.query(
+    `SELECT day_of_week, start_time, end_time, is_available FROM ${table}
+     WHERE school_id=$1 AND term_id=$2 AND ${ownerColumn}=$3`,
+    [schoolId, termId, ownerId]
+  );
+  return !isWithinAvailabilityWindow({ day_of_week: day, start_time: startTime, end_time: endTime }, result.rows);
+};
+
 const getConflictsForSlot = async (schoolId, entry, options = {}) => {
-  const { excludeId = null, requireAssignment = true, ignoreVersionEntries = false } = options;
+  const { excludeId = null, requireAssignment = true, ignoreVersionEntries = false, checkWorkload = true } = options;
   const conflicts = [];
   const startTime = normalizeTime(entry.start_time);
   const endTime = normalizeTime(entry.end_time);
 
   const classRows = await pool.query(
-    `SELECT t.id, t.subject, t.start_time, t.end_time, c.name AS class_name, s.name AS subject_name
+    `SELECT t.id, t.subject, t.start_time, t.end_time, t.day_of_week,
+            c.name AS class_name, s.name AS subject_name, p.name AS period_name
      FROM timetables t
      JOIN classes c ON t.class_id = c.id
      LEFT JOIN subjects s ON t.subject_id = s.id
+     LEFT JOIN timetable_periods p ON p.id = t.period_id
      WHERE t.school_id = $1 AND t.version_id = $7 AND t.day_of_week = $2 AND ${overlapsSql}
        AND t.class_id = $5 AND ($6::INTEGER IS NULL OR t.id <> $6::INTEGER)
        AND $8::BOOLEAN = FALSE`,
      [schoolId, entry.day_of_week, startTime, endTime, entry.class_id, excludeId, entry.version_id, ignoreVersionEntries]
   );
+  const teacherRows = entry.teacher_id ? await pool.query(
+    `SELECT t.id, t.subject, t.start_time, t.end_time, t.day_of_week,
+            c.name AS class_name, s.name AS subject_name, u.name AS teacher_name,
+            p.name AS period_name
+     FROM timetables t
+     JOIN classes c ON t.class_id = c.id
+     LEFT JOIN subjects s ON t.subject_id = s.id
+     LEFT JOIN users u ON t.teacher_id = u.id
+     LEFT JOIN timetable_periods p ON p.id = t.period_id
+     WHERE t.school_id = $1 AND t.version_id = $7 AND t.day_of_week = $2 AND ${overlapsSql}
+       AND t.teacher_id = $5 AND ($6::INTEGER IS NULL OR t.id <> $6::INTEGER)
+       AND $8::BOOLEAN = FALSE`,
+    [schoolId, entry.day_of_week, startTime, endTime, entry.teacher_id, excludeId, entry.version_id, ignoreVersionEntries]
+  ) : { rows: [] };
+  let candidateContext = {};
+  if (classRows.rows.length || teacherRows.rows.length) {
+    const result = await pool.query(
+      `SELECT c.name AS class_name, s.name AS subject_name, u.name AS teacher_name, p.name AS period_name
+       FROM classes c
+       JOIN subjects s ON s.id = $2 AND s.school_id = c.school_id
+       LEFT JOIN users u ON u.id = $3 AND u.school_id = c.school_id
+       LEFT JOIN timetable_periods p ON p.id = $4 AND p.school_id = c.school_id
+       WHERE c.id = $1 AND c.school_id = $5`,
+      [entry.class_id, entry.subject_id, entry.teacher_id, entry.period_id, schoolId]
+    );
+    candidateContext = result.rows[0] || {};
+  }
+  const candidateSlot = candidateContext.period_name || `${startTime} to ${endTime}`;
   classRows.rows.forEach((row) => {
     conflicts.push(createConflict(
       'CLASS_CONFLICT',
-      `Class Conflict: ${row.class_name} is already scheduled for ${getSubjectName(row)} from ${normalizeTime(row.start_time)} to ${normalizeTime(row.end_time)} on ${entry.day_of_week}.`,
-      row
+      `Cannot schedule ${candidateContext.subject_name || getSubjectName(entry)} in ${candidateContext.class_name || 'this class'} on ${entry.day_of_week}, ${candidateSlot}: ${row.class_name} already has ${row.subject_name || getSubjectName(row)} at ${row.period_name || `${normalizeTime(row.start_time)} to ${normalizeTime(row.end_time)}`}.`,
+      { ...row, candidate_class_name: candidateContext.class_name, candidate_subject_name: candidateContext.subject_name, day_of_week: entry.day_of_week, candidate_period: candidateSlot }
     ));
   });
 
   if (entry.teacher_id) {
-    const teacherRows = await pool.query(
-      `SELECT t.id, t.subject, t.start_time, t.end_time, c.name AS class_name, s.name AS subject_name, u.name AS teacher_name
-       FROM timetables t
-       JOIN classes c ON t.class_id = c.id
-       LEFT JOIN subjects s ON t.subject_id = s.id
-       LEFT JOIN users u ON t.teacher_id = u.id
-       WHERE t.school_id = $1 AND t.version_id = $7 AND t.day_of_week = $2 AND ${overlapsSql}
-        AND t.teacher_id = $5 AND ($6::INTEGER IS NULL OR t.id <> $6::INTEGER)
-        AND $8::BOOLEAN = FALSE`,
-      [schoolId, entry.day_of_week, startTime, endTime, entry.teacher_id, excludeId, entry.version_id, ignoreVersionEntries]
-    );
     teacherRows.rows.forEach((row) => {
       conflicts.push(createConflict(
         'TEACHER_CONFLICT',
-        `Teacher Conflict: ${row.teacher_name} is already teaching ${getSubjectName(row)} in ${row.class_name} from ${normalizeTime(row.start_time)} to ${normalizeTime(row.end_time)} on ${entry.day_of_week}.`,
-        row
+        `Cannot schedule ${candidateContext.teacher_name || 'this teacher'} for ${candidateContext.subject_name || getSubjectName(entry)} in ${candidateContext.class_name || 'this class'} on ${entry.day_of_week}, ${candidateSlot}: ${row.teacher_name || 'The teacher'} is already assigned to ${row.subject_name || getSubjectName(row)} in ${row.class_name} at ${row.period_name || `${normalizeTime(row.start_time)} to ${normalizeTime(row.end_time)}`}.`,
+        { ...row, candidate_class_name: candidateContext.class_name, candidate_subject_name: candidateContext.subject_name, day_of_week: entry.day_of_week, candidate_period: candidateSlot }
       ));
     });
 
@@ -469,7 +512,7 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
        FROM teacher_availability a
        JOIN users u ON a.teacher_id = u.id
        WHERE a.school_id = $1 AND a.teacher_id = $5 AND a.day_of_week = $2 AND a.term_id = $6
-         AND a.is_available = FALSE AND ${overlapsSql}`,
+         AND a.is_available = FALSE AND ${overlapsAvailabilitySql}`,
       [schoolId, entry.day_of_week, startTime, endTime, entry.teacher_id, entry.term_id]
     );
     unavailable.rows.forEach((row) => {
@@ -479,6 +522,14 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
         row
       ));
     });
+    if (await isOutsideAvailableWindow('teacher_availability', 'teacher_id', schoolId, entry.teacher_id,
+      entry.term_id, entry.day_of_week, startTime, endTime)) {
+      conflicts.push(createConflict(
+        'TEACHER_AVAILABILITY_CONFLICT',
+        `${candidateContext.teacher_name || 'This teacher'} has configured available periods, but none covers ${entry.day_of_week} ${candidateSlot}.`,
+        { teacher_id: entry.teacher_id, day_of_week: entry.day_of_week, start_time: startTime, end_time: endTime }
+      ));
+    }
   }
 
   const classUnavailable = await pool.query(
@@ -486,7 +537,7 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
      FROM class_availability a
      JOIN classes c ON a.class_id = c.id
      WHERE a.school_id = $1 AND a.class_id = $5 AND a.day_of_week = $2 AND a.term_id = $6
-       AND a.is_available = FALSE AND ${overlapsSql}`,
+       AND a.is_available = FALSE AND ${overlapsAvailabilitySql}`,
     [schoolId, entry.day_of_week, startTime, endTime, entry.class_id, entry.term_id]
   );
   classUnavailable.rows.forEach((row) => {
@@ -496,8 +547,27 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
       row
     ));
   });
+  if (await isOutsideAvailableWindow('class_availability', 'class_id', schoolId, entry.class_id,
+    entry.term_id, entry.day_of_week, startTime, endTime)) {
+    conflicts.push(createConflict(
+      'CLASS_AVAILABILITY_CONFLICT',
+      `${candidateContext.class_name || 'This class'} has configured available periods, but none covers ${entry.day_of_week} ${candidateSlot}.`,
+      { class_id: entry.class_id, day_of_week: entry.day_of_week, start_time: startTime, end_time: endTime }
+    ));
+  }
 
   if (entry.room_id) {
+    const roomValid = await pool.query(
+      'SELECT id FROM timetable_rooms WHERE id=$1 AND school_id=$2 AND is_active=TRUE',
+      [entry.room_id, schoolId]
+    );
+    if (!roomValid.rows.length) {
+      conflicts.push(createConflict(
+        'ROOM_ASSIGNMENT_CONFLICT',
+        'Choose an active room configured for this school.',
+        { room_id: entry.room_id }
+      ));
+    }
     const roomRows = await pool.query(
       `SELECT t.id, t.start_time, t.end_time, c.name AS class_name, s.name AS subject_name, r.name AS room_name
        FROM timetables t
@@ -522,7 +592,7 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
        FROM room_availability a
        JOIN timetable_rooms r ON a.room_id = r.id
        WHERE a.school_id = $1 AND a.room_id = $5 AND a.day_of_week = $2 AND a.term_id = $6
-         AND a.is_available = FALSE AND ${overlapsSql}`,
+         AND a.is_available = FALSE AND ${overlapsAvailabilitySql}`,
       [schoolId, entry.day_of_week, startTime, endTime, entry.room_id, entry.term_id]
     );
     roomUnavailable.rows.forEach((row) => {
@@ -532,6 +602,14 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
         row
       ));
     });
+    if (await isOutsideAvailableWindow('room_availability', 'room_id', schoolId, entry.room_id,
+      entry.term_id, entry.day_of_week, startTime, endTime)) {
+      conflicts.push(createConflict(
+        'ROOM_AVAILABILITY_CONFLICT',
+        `The selected room has configured available periods, but none covers ${entry.day_of_week} ${candidateSlot}.`,
+        { room_id: entry.room_id, day_of_week: entry.day_of_week, start_time: startTime, end_time: endTime }
+      ));
+    }
   }
 
   if (requireAssignment && (!entry.teacher_id || !entry.subject_id || !entry.class_id)) {
@@ -548,18 +626,18 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
       `SELECT u.name AS teacher_name, s.name AS subject_name, c.name AS class_name,
               c.year_level, c.teaching_model,
               (SELECT ca.teacher_id FROM timetable_class_teacher_assignments ca
-               WHERE ca.school_id = c.school_id AND ca.term_id = $5 AND ca.class_id = c.id) AS class_teacher_id
+               WHERE ca.school_id = c.school_id AND ca.term_id = $5 AND ca.class_id = c.id) AS term_class_teacher_id,
+              c.class_teacher_id
        FROM users u
        JOIN subjects s ON s.school_id = u.school_id
        JOIN classes c ON c.school_id = u.school_id
        WHERE u.id = $1 AND s.id = $2 AND c.id = $3 AND u.school_id = $4
-         AND u.role = 'teacher' AND u.is_active = TRUE`,
+         AND u.role = 'teacher' AND u.is_active = TRUE AND s.is_active = TRUE AND s.is_archived = FALSE`,
       [entry.teacher_id, entry.subject_id, entry.class_id, schoolId, entry.term_id]
     );
     const row = context.rows[0] || {};
-      const classTeacherMayTeach = Number(row.year_level) >= 1 && Number(row.year_level) <= 3
-      && row.teaching_model === 'class_teacher'
-      && String(row.class_teacher_id) === String(entry.teacher_id);
+      const classTeacherMayTeach = row.teaching_model === 'class_teacher'
+        && String(row.term_class_teacher_id || row.class_teacher_id) === String(entry.teacher_id);
     if (!context.rows.length || (!assignment.rows.length && !classTeacherMayTeach)) {
       conflicts.push(createConflict(
         'SUBJECT_ASSIGNMENT_CONFLICT',
@@ -568,21 +646,82 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
       ));
     }
 
-    const workload = await pool.query(
-      `SELECT max_periods_per_week,
-              COALESCE((SELECT SUM(t.period_count) FROM timetables t
-                WHERE t.school_id = $1 AND t.version_id = $2 AND t.teacher_id = $3
-                  AND ($4::INTEGER IS NULL OR t.id <> $4::INTEGER)), 0)::INTEGER AS used_periods
-       FROM teacher_workload_limits WHERE school_id = $1 AND teacher_id = $3 AND term_id = $5`,
-      [schoolId, entry.version_id, entry.teacher_id, excludeId, entry.term_id]
+    const curriculum = await pool.query(
+      `SELECT c.id
+       FROM classes c
+       JOIN curriculum_subjects cs ON cs.school_id=c.school_id
+         AND cs.curriculum=c.curriculum AND cs.subject_id=$2
+       WHERE c.id=$1 AND c.school_id=$3`,
+      [entry.class_id, entry.subject_id, schoolId]
     );
-    const limit = workload.rows[0];
-    if (limit && Number(limit.used_periods) + Number(entry.period_count || 1) > Number(limit.max_periods_per_week)) {
+    if (!curriculum.rows.length) {
       conflicts.push(createConflict(
-        'TEACHER_WORKLOAD_CONFLICT',
-        `${row.teacher_name || 'This teacher'} would exceed the weekly workload limit of ${limit.max_periods_per_week} periods.`,
-        { used_periods: Number(limit.used_periods), max_periods_per_week: Number(limit.max_periods_per_week) }
+        'CURRICULUM_SUBJECT_CONFLICT',
+        'Curriculum Subject Conflict: this subject is not configured for the class curriculum.',
+        { class_id: entry.class_id, subject_id: entry.subject_id }
       ));
+    }
+    const classSubject = await pool.query(
+      `SELECT 1 FROM subject_class_assignments a
+       JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id AND s.is_active=TRUE AND s.is_archived=FALSE
+       JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id AND c.curriculum=a.curriculum
+       WHERE a.school_id=$1 AND a.class_id=$2 AND a.subject_id=$3`,
+      [schoolId, entry.class_id, entry.subject_id]
+    );
+    if (!classSubject.rows.length) {
+      conflicts.push(createConflict(
+        'CLASS_SUBJECT_ASSIGNMENT_CONFLICT',
+        `${candidateContext.subject_name || getSubjectName(entry)} is not actively assigned to ${candidateContext.class_name || 'this class'} for its configured curriculum.`,
+        { class_id: entry.class_id, subject_id: entry.subject_id }
+      ));
+    }
+
+    const requirement = await pool.query(
+      `SELECT r.lessons_per_week,
+              COALESCE(SUM(t.period_count), 0)::INTEGER AS scheduled_periods
+       FROM subject_weekly_requirements r
+       LEFT JOIN timetables t ON t.school_id = r.school_id AND t.version_id = $4
+         AND t.class_id = r.class_id AND t.subject_id = r.subject_id
+         AND ($5::INTEGER IS NULL OR t.id <> $5::INTEGER)
+         AND ($7::BOOLEAN = FALSE OR t.is_locked = TRUE)
+       WHERE r.school_id = $1 AND r.term_id = $6 AND r.class_id = $2 AND r.subject_id = $3
+       GROUP BY r.id`,
+      [schoolId, entry.class_id, entry.subject_id, entry.version_id, excludeId, entry.term_id, ignoreVersionEntries]
+    );
+    if (!requirement.rows.length) {
+      conflicts.push(createConflict(
+        'WEEKLY_REQUIREMENT_MISSING',
+        `Configure a weekly lesson requirement for ${candidateContext.subject_name || getSubjectName(entry)} in ${candidateContext.class_name || 'this class'} before adding it to the timetable.`,
+        { class_id: entry.class_id, subject_id: entry.subject_id }
+      ));
+    } else {
+      const { lessons_per_week: requiredPeriods, scheduled_periods: scheduledPeriods } = requirement.rows[0];
+      if (Number(scheduledPeriods) + Number(entry.period_count || 1) > Number(requiredPeriods)) {
+        conflicts.push(createConflict(
+          'WEEKLY_REQUIREMENT_EXCEEDED',
+          `${candidateContext.class_name || 'This class'} already has ${scheduledPeriods} of ${requiredPeriods} required weekly periods for ${candidateContext.subject_name || getSubjectName(entry)}; this lesson would exceed the configured requirement.`,
+          { class_id: entry.class_id, subject_id: entry.subject_id, required_periods: Number(requiredPeriods), scheduled_periods: Number(scheduledPeriods) }
+        ));
+      }
+    }
+
+    if (checkWorkload) {
+      const workload = await pool.query(
+        `SELECT max_periods_per_week,
+                COALESCE((SELECT SUM(t.period_count) FROM timetables t
+                  WHERE t.school_id = $1 AND t.version_id = $2 AND t.teacher_id = $3
+                    AND ($4::INTEGER IS NULL OR t.id <> $4::INTEGER)), 0)::INTEGER AS used_periods
+         FROM teacher_workload_limits WHERE school_id = $1 AND teacher_id = $3 AND term_id = $5`,
+        [schoolId, entry.version_id, entry.teacher_id, excludeId, entry.term_id]
+      );
+      const limit = workload.rows[0];
+      if (limit && Number(limit.used_periods) + Number(entry.period_count || 1) > Number(limit.max_periods_per_week)) {
+        conflicts.push(createConflict(
+          'TEACHER_WORKLOAD_CONFLICT',
+          `${row.teacher_name || 'This teacher'} would exceed the weekly workload limit of ${limit.max_periods_per_week} periods.`,
+          { used_periods: Number(limit.used_periods), max_periods_per_week: Number(limit.max_periods_per_week) }
+        ));
+      }
     }
   }
 
@@ -592,11 +731,14 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
      ORDER BY sort_order, start_time`,
     [schoolId, entry.day_of_week, entry.term_id]
   );
-  if (configuredPeriods.rows.length) {
+  const timetablePeriods = configuredPeriods.rows.length
+    ? configuredPeriods.rows
+    : DEFAULT_PERIODS.map((period) => ({ ...period, day_of_week: null }));
+  if (timetablePeriods.length) {
     // A double lesson spans two configured teaching periods, so validate the
     // entire interval as a contiguous chain instead of requiring one period
     // row to match its combined start and end times.
-    const periodsInSpan = configuredPeriods.rows
+    const periodsInSpan = timetablePeriods
       .filter((period) => normalizeTime(period.start_time) >= startTime
         && normalizeTime(period.end_time) <= endTime)
       .sort((left, right) => normalizeTime(left.start_time).localeCompare(normalizeTime(right.start_time)));
@@ -615,7 +757,7 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
       conflicts.push(createConflict('OUTSIDE_CONFIGURED_PERIOD', 'Lesson must fit exactly within a configured teaching period.'));
     }
     if (overlapsBreak) {
-      const breakPeriod = configuredPeriods.rows.find((period) => period.is_break
+      const breakPeriod = timetablePeriods.find((period) => period.is_break
         && normalizeTime(period.start_time) < endTime && normalizeTime(period.end_time) > startTime);
       conflicts.push(createConflict('BREAK_PERIOD', `Lesson overlaps ${breakPeriod?.name || 'a non-teaching period'}.`));
     }
@@ -807,18 +949,26 @@ const getTimetableMeta = async (req, res, next) => {
   const { school_id } = req.user;
   try {
     await ensureSchema();
-    const [classes, teachers, subjects, rooms, settings, versions] = await Promise.all([
+    const [classes, teachers, subjects, rooms, settings, versions, classSubjects] = await Promise.all([
       pool.query(`SELECT c.id, c.name, c.description, c.teacher_id, c.class_teacher_id, c.year_level, c.teaching_model, u.name AS class_teacher_name
         FROM classes c LEFT JOIN users u ON u.id = c.class_teacher_id WHERE c.school_id = $1 ORDER BY c.year_level NULLS LAST, c.name`, [school_id]),
       pool.query("SELECT id, name, email, subjects FROM users WHERE school_id = $1 AND role = 'teacher' AND is_active = TRUE ORDER BY name", [school_id]),
-      pool.query('SELECT * FROM subjects WHERE school_id = $1 ORDER BY name', [school_id]),
+      pool.query('SELECT * FROM subjects WHERE school_id = $1 AND is_active = TRUE AND is_archived = FALSE ORDER BY name', [school_id]),
       pool.query('SELECT * FROM timetable_rooms WHERE school_id = $1 AND is_active = TRUE ORDER BY name', [school_id]),
       pool.query('SELECT academic_year, current_term FROM schools WHERE id = $1', [school_id]),
       pool.query('SELECT * FROM timetable_versions WHERE school_id = $1 ORDER BY academic_year DESC, term, revision DESC', [school_id]),
+      pool.query(`SELECT a.class_id, a.subject_id, a.curriculum, c.name AS class_name,
+                    s.name AS subject_name, s.code AS subject_code
+                  FROM subject_class_assignments a
+                  JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id AND c.curriculum=a.curriculum
+                  JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+                    AND s.is_active=TRUE AND s.is_archived=FALSE
+                  WHERE a.school_id=$1
+                  ORDER BY c.name, s.name`, [school_id]),
     ]);
     const version = req.query.version_id ? versions.rows.find((row) => Number(row.id) === Number(req.query.version_id)) : null;
     if (req.query.version_id && !version) return res.status(404).json({ message: 'Timetable version not found.' });
-    let periods = [], assignments = [], classTeacherAssignments = [], availability = [], requirements = [], workloadLimits = [];
+    let periods = [], assignments = [], classTeacherAssignments = [], availability = [], requirements = [], workloadLimits = [], schedulingPreferences = [];
     let termSettings = {};
     if (version) {
       const termId = version.term_id;
@@ -837,13 +987,22 @@ const getTimetableMeta = async (req, res, next) => {
           WHERE r.school_id = $1 AND r.term_id = $2 ORDER BY c.name, s.name`, [school_id, termId]),
         pool.query(`SELECT l.*, u.name AS teacher_name FROM teacher_workload_limits l JOIN users u ON u.id = l.teacher_id WHERE l.school_id = $1 AND l.term_id = $2 ORDER BY u.name`, [school_id, termId]),
         pool.query('SELECT academic_year, term, subject_teaching_starts_from FROM timetable_terms WHERE school_id = $1 AND id = $2', [school_id, termId]),
+        pool.query(`SELECT p.*, s.name AS subject_name, c.name AS class_name
+          FROM subject_scheduling_preferences p
+          JOIN subjects s ON s.id=p.subject_id AND s.school_id=p.school_id
+          LEFT JOIN classes c ON c.id=p.class_id AND c.school_id=p.school_id
+          WHERE p.school_id=$1 AND (p.class_id IS NULL OR c.id IS NOT NULL)
+          ORDER BY s.name, c.name NULLS FIRST, p.preference_rank`, [school_id]),
       ]);
       [periods, assignments, classTeacherAssignments, availability, requirements, workloadLimits] = scoped.slice(0, 6).map((result) => result.rows);
       termSettings = scoped[6].rows[0] || {};
+      schedulingPreferences = scoped[7].rows;
     }
     const academicYears = [...new Set([settings.rows[0]?.academic_year, ...versions.rows.map((row) => row.academic_year)].filter(Boolean))].sort((a, b) => b.localeCompare(a));
     res.json({ classes: classes.rows, teachers: teachers.rows, subjects: subjects.rows, rooms: rooms.rows,
+      class_subject_assignments: classSubjects.rows,
       periods, assignments, class_teacher_assignments: classTeacherAssignments, availability, requirements, versions: versions.rows, current_version: version,
+      scheduling_preferences: schedulingPreferences,
       academic_years: academicYears, terms: ['Term 1', 'Term 2', 'Term 3'], workload_limits: workloadLimits,
       settings: { ...settings.rows[0], ...termSettings } });
   } catch (error) {
@@ -852,10 +1011,14 @@ const getTimetableMeta = async (req, res, next) => {
 };
 
 const resolveLessonSlot = async (schoolId, termId, payload) => {
+  if (!ALL_DAYS.includes(payload.day_of_week)) return { error: 'Select a valid configured school day.' };
   const periodCount = Number(payload.period_count || 1);
   if (![1, 2].includes(periodCount)) return { error: 'Lessons may occupy one period or a supported consecutive double period.' };
   const period = await loadPeriod(schoolId, termId, payload.period_id);
   if (payload.period_id && !period) return { error: 'The selected period is inactive or does not belong to this school.' };
+  if (period?.day_of_week && period.day_of_week !== payload.day_of_week) {
+    return { error: 'The selected period is configured for a different school day.' };
+  }
   let endTime = normalizeTime(period?.end_time || payload.end_time);
   if (periodCount === 2) {
     if (!period || period.is_break) return { error: 'Double periods must start in a configured teaching period.' };
@@ -1115,6 +1278,8 @@ const upsertAssignment = async (req, res, next) => {
        JOIN classes c ON c.school_id = u.school_id
        JOIN curriculum_subjects cs ON cs.school_id = c.school_id
          AND cs.subject_id = s.id AND cs.curriculum = c.curriculum
+       JOIN subject_class_assignments ca ON ca.school_id=c.school_id
+         AND ca.class_id=c.id AND ca.subject_id=s.id AND ca.curriculum=c.curriculum
        WHERE u.id = $1 AND s.id = $2 AND c.id = $3 AND u.school_id = $4
          AND u.role = 'teacher' AND u.is_active = TRUE`,
       [teacher_id, subject_id, class_id, school_id]
@@ -1182,7 +1347,10 @@ const upsertRequirement = async (req, res, next) => {
       `SELECT c.id FROM classes c JOIN subjects s ON s.school_id = c.school_id
        JOIN curriculum_subjects cs ON cs.school_id = c.school_id
          AND cs.subject_id = s.id AND cs.curriculum = c.curriculum
-       WHERE c.id = $1 AND s.id = $2 AND c.school_id = $3`,
+       JOIN subject_class_assignments ca ON ca.school_id=c.school_id
+         AND ca.class_id=c.id AND ca.subject_id=s.id AND ca.curriculum=c.curriculum
+       WHERE c.id = $1 AND s.id = $2 AND c.school_id = $3
+         AND s.is_active = TRUE AND s.is_archived = FALSE`,
       [class_id, subject_id, school_id]
     );
     if (!valid.rows.length) return res.status(400).json({ message: 'Choose a class and subject from this school.' });
@@ -1329,9 +1497,14 @@ const getValidation = async (req, res, next) => {
               COUNT(t.id)::INTEGER AS generated_lessons,
               COUNT(*) FILTER (WHERE t.period_count = 2)::INTEGER AS scheduled_double_periods,
               EXISTS (SELECT 1 FROM teacher_subject_assignments a
+                JOIN users u ON u.id = a.teacher_id AND u.school_id = a.school_id
+                  AND u.role = 'teacher' AND u.is_active = TRUE
           WHERE a.school_id = r.school_id AND a.term_id = r.term_id AND a.class_id = r.class_id AND a.subject_id = r.subject_id) AS has_subject_teacher,
-              EXISTS (SELECT 1 FROM timetable_class_teacher_assignments ca JOIN users u ON u.id = ca.teacher_id
-          WHERE ca.school_id = r.school_id AND ca.term_id = r.term_id AND ca.class_id = r.class_id AND u.is_active = TRUE) AS has_class_teacher,
+              EXISTS (SELECT 1 FROM users u
+                WHERE u.id = COALESCE((SELECT ca.teacher_id FROM timetable_class_teacher_assignments ca
+                  WHERE ca.school_id = r.school_id AND ca.term_id = r.term_id AND ca.class_id = r.class_id),
+                  c.class_teacher_id)
+                  AND u.school_id = c.school_id AND u.is_active = TRUE AND u.role = 'teacher') AS has_class_teacher,
               c.teaching_model
        FROM subject_weekly_requirements r
        JOIN classes c ON r.class_id = c.id
@@ -1348,8 +1521,8 @@ const getValidation = async (req, res, next) => {
       missing_lessons: Math.max(0, Number(row.lessons_per_week) - Number(row.generated_periods)),
       extra_lessons: Math.max(0, Number(row.generated_periods) - Number(row.lessons_per_week)),
       missing_double_periods: Math.max(0, Number(row.double_periods_per_week || 0) - Number(row.scheduled_double_periods)),
-      missing_teacher_assignment: row.teaching_model === 'class_teacher' && Number(row.year_level) <= 3
-        ? !row.has_class_teacher : !row.has_subject_teacher,
+      missing_teacher_assignment: row.teaching_model === 'class_teacher'
+        ? !row.has_class_teacher && !row.has_subject_teacher : !row.has_subject_teacher,
     }));
 
     if (!weekly.length) {
@@ -1365,6 +1538,20 @@ const getValidation = async (req, res, next) => {
           'SUBJECT_ASSIGNMENT_MISSING',
           `${requirement.class_name} has no assigned teacher for ${requirement.subject_name}.`,
           { class_id: requirement.class_id, subject_id: requirement.subject_id }
+        ));
+      }
+      if (requirement.missing_lessons > 0) {
+        conflicts.push(createConflict(
+          'WEEKLY_REQUIREMENT_MISSING_LESSONS',
+          `${requirement.class_name} has ${requirement.missing_lessons} unscheduled weekly period(s) for ${requirement.subject_name}.`,
+          { class_id: requirement.class_id, subject_id: requirement.subject_id, missing_periods: requirement.missing_lessons }
+        ));
+      }
+      if (requirement.extra_lessons > 0) {
+        conflicts.push(createConflict(
+          'WEEKLY_REQUIREMENT_EXTRA',
+          `${requirement.class_name} has ${requirement.extra_lessons} more scheduled weekly period(s) than required for ${requirement.subject_name}.`,
+          { class_id: requirement.class_id, subject_id: requirement.subject_id, extra_periods: requirement.extra_lessons }
         ));
       }
       if (requirement.missing_double_periods > 0) {
@@ -1426,7 +1613,8 @@ const getSuggestions = async (req, res, next) => {
     const payload = { ...req.query, ...req.body };
     const version = await getCurrentVersion(school_id, payload.version_id);
     if (!version || version.status !== 'DRAFT') return res.status(400).json({ message: 'Select an editable draft for an academic year and term first.' });
-    const period = await loadPeriod(school_id, version.term_id, payload.period_id);
+    const slot = await resolveLessonSlot(school_id, version.term_id, payload);
+    if (slot.error) return res.status(400).json({ message: slot.error });
     const subjectId = await resolveSubjectId(school_id, payload.subject_id, payload.subject);
     const entry = {
       class_id: Number(payload.class_id),
@@ -1435,9 +1623,11 @@ const getSuggestions = async (req, res, next) => {
       version_id: version.id,
       term_id: version.term_id,
       room_id: payload.room_id || null,
+      period_id: slot.period?.id || null,
+      period_count: slot.periodCount,
       day_of_week: payload.day_of_week,
-      start_time: normalizeTime(period?.start_time || payload.start_time),
-      end_time: normalizeTime(period?.end_time || payload.end_time),
+      start_time: slot.startTime,
+      end_time: slot.endTime,
     };
     res.json({ suggestions: await findSuggestions(school_id, entry, 10) });
   } catch (error) {
@@ -1447,7 +1637,17 @@ const getSuggestions = async (req, res, next) => {
 
 const generateTimetable = async (req, res, next) => {
   const { school_id, id: userId } = req.user;
-  const { class_ids, days = DAYS, overwrite_draft = false, version_id, expected_revision } = req.body;
+  const { class_ids, days, overwrite_draft = false, version_id, expected_revision } = req.body;
+  if (typeof overwrite_draft !== 'boolean') {
+    return res.status(400).json({ message: 'Confirm whether existing draft lessons should be replaced.' });
+  }
+  if (class_ids !== undefined && class_ids !== null
+      && (!Array.isArray(class_ids) || class_ids.some((id) => !Number.isInteger(Number(id)) || Number(id) < 1))) {
+    return res.status(400).json({ message: 'Choose valid school classes for timetable generation.' });
+  }
+  if (days !== undefined && (!Array.isArray(days) || days.some((day) => !ALL_DAYS.includes(day)))) {
+    return res.status(400).json({ message: 'Choose valid configured school days.' });
+  }
   const client = await pool.connect();
   let transactionOpen = false;
   try {
@@ -1462,8 +1662,19 @@ const generateTimetable = async (req, res, next) => {
     }
     const version = locked.version;
     const selectedClassIds = class_ids?.length ? class_ids.map(Number) : null;
-    const validDays = Array.isArray(days) ? days.filter((day) => DAYS.includes(day)) : DAYS;
-    if (!validDays.length) {
+    if (selectedClassIds) {
+      const selectedClasses = await client.query(
+        'SELECT id FROM classes WHERE school_id=$1 AND id=ANY($2::INTEGER[])',
+        [school_id, selectedClassIds]
+      );
+      if (selectedClasses.rowCount !== new Set(selectedClassIds).size) {
+        await client.query('ROLLBACK');
+        transactionOpen = false;
+        return res.status(400).json({ message: 'One or more selected classes do not belong to this school.' });
+      }
+    }
+    const requestedDays = Array.isArray(days) ? [...new Set(days.filter((day) => ALL_DAYS.includes(day)))] : null;
+    if (Array.isArray(days) && !requestedDays.length) {
       await client.query('ROLLBACK');
       transactionOpen = false;
       return res.status(400).json({ message: 'Select at least one configured school day.' });
@@ -1471,8 +1682,9 @@ const generateTimetable = async (req, res, next) => {
 
       const requirements = await client.query(
       `SELECT r.*, c.name AS class_name, c.year_level, c.teaching_model,
-              (SELECT ca.teacher_id FROM timetable_class_teacher_assignments ca
-               WHERE ca.school_id = c.school_id AND ca.term_id = r.term_id AND ca.class_id = c.id) AS class_teacher_id,
+              COALESCE((SELECT ca.teacher_id FROM timetable_class_teacher_assignments ca
+               WHERE ca.school_id = c.school_id AND ca.term_id = r.term_id AND ca.class_id = c.id),
+              c.class_teacher_id) AS class_teacher_id,
               s.name AS subject_name,
               (SELECT COUNT(*)::INTEGER FROM students st WHERE st.class_id = c.id AND st.school_id = c.school_id) AS student_count
        FROM subject_weekly_requirements r
@@ -1493,6 +1705,8 @@ const generateTimetable = async (req, res, next) => {
        ORDER BY day_of_week NULLS FIRST, sort_order, start_time`,
       [school_id, version.term_id]
     );
+    const periodDays = [...new Set(periodResult.rows.map((period) => period.day_of_week).filter(Boolean))];
+    const validDays = requestedDays || (periodDays.length ? periodDays : DAYS);
     const allConfiguredPeriods = periodResult.rows.length ? periodResult.rows : DEFAULT_PERIODS.map((period, index) => ({ ...period, id: null, day_of_week: null, sort_order: index + 1 }));
     const periods = allConfiguredPeriods.filter((period) => !period.is_break);
     const slots = periods.flatMap((period) => (period.day_of_week ? [period.day_of_week] : validDays)
@@ -1551,12 +1765,15 @@ const generateTimetable = async (req, res, next) => {
            AND u.role = 'teacher' AND u.is_active = TRUE ORDER BY u.id`,
         [school_id, requirement.class_id, requirement.subject_id, version.term_id]
       )).rows;
-      if (!assignmentRows.length && Number(requirement.year_level) <= 3 && requirement.teaching_model === 'class_teacher') {
-        assignmentRows = (await client.query(
+      if (requirement.teaching_model === 'class_teacher' && requirement.class_teacher_id) {
+        const classTeacherRows = (await client.query(
           `SELECT id AS teacher_id, name AS teacher_name FROM users
            WHERE id = $1 AND school_id = $2 AND role = 'teacher' AND is_active = TRUE`,
           [requirement.class_teacher_id, school_id]
         )).rows;
+        if (classTeacherRows.length && !assignmentRows.some((item) => Number(item.teacher_id) === Number(classTeacherRows[0].teacher_id))) {
+          assignmentRows.push(classTeacherRows[0]);
+        }
       }
       if (!assignmentRows.length) {
         unitFailures.push({ ...requirement, missing_lessons: remainingPeriods, reason: Number(requirement.year_level) >= 4
@@ -1567,6 +1784,16 @@ const generateTimetable = async (req, res, next) => {
       const lessonPeriods = [];
       for (let index = 0; index < doubles; index += 1) lessonPeriods.push(2);
       for (let index = 0; index < remainingPeriods - (doubles * 2); index += 1) lessonPeriods.push(1);
+
+      const schedulingPreferences = (await client.query(
+        `SELECT preferred_day_of_week, preferred_period_slot, avoid_period_slot,
+                preference_rank
+         FROM subject_scheduling_preferences
+         WHERE school_id=$1 AND subject_id=$2
+           AND (class_id IS NULL OR class_id=$3)
+         ORDER BY preference_rank ASC`,
+        [school_id, requirement.subject_id, requirement.class_id]
+      )).rows;
 
       for (const periodCount of lessonPeriods) {
         const candidates = [];
@@ -1588,6 +1815,7 @@ const generateTimetable = async (req, res, next) => {
               term_id: version.term_id,
               class_id: requirement.class_id,
               subject_id: requirement.subject_id,
+              period_slot: getPeriodSlot(slots, first),
               teacher_id: assignmentRows[0].teacher_id,
               room_id: room?.id || null,
               period_id: first.id || null,
@@ -1598,7 +1826,10 @@ const generateTimetable = async (req, res, next) => {
             };
             for (const teacher of assignmentRows) {
               const teacherCandidate = { ...candidate, teacher_id: teacher.teacher_id };
-              const candidateConflicts = await getConflictsForSlot(school_id, teacherCandidate, { ignoreVersionEntries: overwrite_draft });
+              const candidateConflicts = await getConflictsForSlot(school_id, teacherCandidate, {
+                ignoreVersionEntries: overwrite_draft,
+                checkWorkload: false,
+              });
               if (!candidateConflicts.length) candidates.push(teacherCandidate);
             }
           }
@@ -1608,6 +1839,7 @@ const generateTimetable = async (req, res, next) => {
           subject_id: requirement.subject_id,
           period_count: periodCount,
           candidates,
+          scheduling_preferences: schedulingPreferences,
           reason: requirement.room_required && !rooms.length
             ? `No active room is available for ${requirement.class_name} ${requirement.subject_name}.`
             : 'No legal period satisfies teacher, class, room, availability, subject, or workload rules.',
@@ -1625,8 +1857,20 @@ const generateTimetable = async (req, res, next) => {
       return { ...item, requirement: unit?.requirement || item.requirement };
     })]) {
       const key = `${unit.class_id}:${unit.subject_id}`;
+      const sourceUnit = lessonUnits.find((candidate) => candidate.class_id === unit.class_id
+        && candidate.subject_id === unit.subject_id
+        && (!unit.period_count || candidate.period_count === unit.period_count));
+      const suggestions = [...new Map((sourceUnit?.candidates || []).map((candidate) => [
+        `${candidate.day_of_week}:${candidate.start_time}:${candidate.end_time}`,
+        { day_of_week: candidate.day_of_week, start_time: candidate.start_time, end_time: candidate.end_time, period_id: candidate.period_id },
+      ])).values()].slice(0, 5);
       const existing = failureByRequirement.get(key);
-      if (existing) existing.missing_lessons += Number(unit.period_count || unit.missing_lessons || 1);
+      if (existing) {
+        existing.missing_lessons += Number(unit.period_count || unit.missing_lessons || 1);
+        existing.suggestions = [...new Map([...existing.suggestions, ...suggestions].map((item) => [
+          `${item.day_of_week}:${item.start_time}:${item.end_time}`, item,
+        ])).values()].slice(0, 5);
+      }
       else failureByRequirement.set(key, {
         ...unit.requirement,
         class_id: unit.class_id,
@@ -1634,6 +1878,7 @@ const generateTimetable = async (req, res, next) => {
         teacher_id: unit.teacher_id || null,
         missing_lessons: Number(unit.missing_lessons || unit.period_count || 1),
         reason: unit.reason || 'No complete conflict-free placement was found.',
+        suggestions,
       });
     }
     for (const failure of capacityFailures) failureByRequirement.set(`${failure.class_id}:${failure.subject_id}`, failure);
@@ -1650,9 +1895,10 @@ const generateTimetable = async (req, res, next) => {
       await client.query(
         `INSERT INTO timetable_unscheduled_lessons
          (school_id, generation_run_id, class_id, subject_id, teacher_id, required_lessons, scheduled_lessons, missing_lessons, reason, suggestions)
-         VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,'[]'::jsonb)`,
+         VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9::jsonb)`,
         [school_id, runId, item.class_id, item.subject_id, item.teacher_id || null,
-          item.lessons_per_week || item.required_lessons || 0, item.missing_lessons || 0, item.reason]
+          item.lessons_per_week || item.required_lessons || 0, item.missing_lessons || 0, item.reason,
+          JSON.stringify(item.suggestions || [])]
       );
     }
 

@@ -1,13 +1,10 @@
-import axios from 'axios';
+import api from './api';
 
-const API_URL = 'http://localhost:5000/api/subjects';
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('sms_token');
-  return { headers: { Authorization: `Bearer ${token}` } };
-};
-
-export const getSubjects = () => axios.get(API_URL, getAuthHeaders());
-export const createSubject = (data) => axios.post(API_URL, data, getAuthHeaders());
-export const updateSubject = (id, data) => axios.put(`${API_URL}/${id}`, data, getAuthHeaders());
-export const deleteSubject = (id) => axios.delete(`${API_URL}/${id}`, getAuthHeaders());
+export const getSubjects = () => api.get('/subjects');
+export const createSubject = (data) => api.post('/subjects', data);
+export const updateSubject = (id, data) => api.put(`/subjects/${id}`, data);
+export const deleteSubject = (id) => api.delete(`/subjects/${id}`);
+export const getSubjectClassAssignments = () => api.get('/subjects/class-assignments');
+export const upsertSubjectClassAssignment = (data) => api.post('/subjects/class-assignments', data);
+export const getSubjectSchedulingPreferences = () => api.get('/subjects/scheduling-preferences');
+export const upsertSubjectSchedulingPreference = (data) => api.post('/subjects/scheduling-preferences', data);

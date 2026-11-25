@@ -9,6 +9,14 @@ const overlaps = (left, right) => (
   && timeToMinutes(left.end_time) > timeToMinutes(right.start_time)
 );
 
+function isWithinAvailabilityWindow(candidate, windows) {
+  const available = windows.filter((window) => window.is_available && window.day_of_week === candidate.day_of_week);
+  return !available.length || available.some((window) => (
+    timeToMinutes(window.start_time) <= timeToMinutes(candidate.start_time)
+    && timeToMinutes(window.end_time) >= timeToMinutes(candidate.end_time)
+  ));
+}
+
 const conflictsWith = (candidate, lesson, scheduled, workloadLimits) => {
   const overlapConflict = scheduled.some((other) => (
     overlaps(candidate, other)
@@ -29,6 +37,20 @@ const conflictsWith = (candidate, lesson, scheduled, workloadLimits) => {
 
 const candidatePenalty = (candidate, lesson, scheduled) => {
   let score = 0;
+  const preferences = Array.isArray(lesson.scheduling_preferences) ? lesson.scheduling_preferences : [];
+  for (const preference of preferences) {
+    if (preference.preferred_day_of_week && candidate.day_of_week === preference.preferred_day_of_week) {
+      score -= Number(preference.preference_rank || 1);
+    }
+    if (preference.preferred_period_slot
+      && Number(preference.preferred_period_slot) === Number(candidate.period_slot)) {
+      score -= Number(preference.preference_rank || 1);
+    }
+    if (preference.avoid_period_slot
+      && Number(preference.avoid_period_slot) === Number(candidate.period_slot)) {
+      score += 12;
+    }
+  }
   const subjectSlots = scheduled.filter((item) => (
     String(item.class_id) === String(lesson.class_id)
     && String(item.subject_id) === String(lesson.subject_id)
@@ -55,6 +77,18 @@ const candidatePenalty = (candidate, lesson, scheduled) => {
   }
   return score;
 };
+
+function getPeriodSlot(slots, candidate) {
+  const daySlots = slots
+    .filter((slot) => slot.day_of_week === candidate.day_of_week)
+    .sort((left, right) => timeToMinutes(left.start_time) - timeToMinutes(right.start_time));
+  const index = daySlots.findIndex((slot) => (
+    String(slot.id ?? slot.period_id ?? '') === String(candidate.id ?? candidate.period_id ?? '')
+    && timeToMinutes(slot.start_time) === timeToMinutes(candidate.start_time)
+    && timeToMinutes(slot.end_time) === timeToMinutes(candidate.end_time)
+  ));
+  return index < 0 ? null : index + 1;
+}
 
 function solveTimetable({ lessons, fixedLessons = [], workloadLimits = {}, maxNodes = 100000 }) {
   const scheduled = fixedLessons.map((lesson) => ({ ...lesson }));
@@ -114,4 +148,4 @@ function solveTimetable({ lessons, fixedLessons = [], workloadLimits = {}, maxNo
   return { solved, placements: result, unscheduled: missing, visited_nodes: visited, deepest_position: deepest };
 }
 
-module.exports = { solveTimetable, overlaps, timeToMinutes };
+module.exports = { solveTimetable, overlaps, timeToMinutes, getPeriodSlot, isWithinAvailabilityWindow };

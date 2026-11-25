@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS subjects (
   school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   code TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+  is_compulsory BOOLEAN NOT NULL DEFAULT TRUE,
+  lesson_duration_minutes INTEGER,
+  applicable_year_levels INTEGER[],
+  scheduling_preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE (school_id, name)
 );
