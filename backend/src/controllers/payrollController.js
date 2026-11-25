@@ -7,7 +7,7 @@ const getPayroll = async (req, res, next) => {
   try {
     let query = `
       SELECT p.*, e.full_name, e.role, e.bank_name, e.bank_account,
-        e.staff_id, e.ssnit_number, e.ghana_card, e.employment_status,
+        e.staff_id, e.ssnit_number, e.ghana_card, e.employment_status, e.employment_type,
         COALESCE(
           (SELECT json_agg(json_build_object('id', pd.id, 'type', pd.type, 'amount', pd.amount, 'description', pd.description))
            FROM payroll_deductions pd WHERE pd.payroll_id = p.id), '[]'::json

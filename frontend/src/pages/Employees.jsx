@@ -40,7 +40,7 @@ function Employees() {
     basic_salary: 0, allowance: 0, deductions: 0,
     bank_name: '', bank_account: '', is_active: true,
     staff_id: '', pension_member_id: '', ssnit_number: '', date_of_birth: '',
-    ghana_card: '', employment_status: 'active', termination_date: ''
+    ghana_card: '', employment_type: '', termination_date: ''
   });
 
   useEffect(() => {
@@ -71,7 +71,7 @@ function Employees() {
       bank_name: emp.bank_name || '', bank_account: emp.bank_account || '', is_active: emp.is_active,
       staff_id: emp.staff_id || '', pension_member_id: emp.pension_member_id || '',
       ssnit_number: emp.ssnit_number || '', date_of_birth: emp.date_of_birth ? String(emp.date_of_birth).slice(0, 10) : '',
-      ghana_card: emp.ghana_card || '', employment_status: emp.employment_status || (emp.is_active ? 'active' : 'inactive'),
+      ghana_card: emp.ghana_card || '', employment_type: emp.employment_type || '',
       termination_date: emp.termination_date ? String(emp.termination_date).slice(0, 10) : ''
     });
   };
@@ -79,7 +79,7 @@ function Employees() {
   const handleCancel = () => {
     setEditingId(null);
     setCustomRole('');
-    setFormData({ full_name: '', role: '', phone: '', email: '', basic_salary: 0, allowance: 0, deductions: 0, bank_name: '', bank_account: '', is_active: true, staff_id: '', pension_member_id: '', ssnit_number: '', date_of_birth: '', ghana_card: '', employment_status: 'active', termination_date: '' });
+    setFormData({ full_name: '', role: '', phone: '', email: '', basic_salary: 0, allowance: 0, deductions: 0, bank_name: '', bank_account: '', is_active: true, staff_id: '', pension_member_id: '', ssnit_number: '', date_of_birth: '', ghana_card: '', employment_type: '', termination_date: '' });
   };
 
   const handleSubmit = async (e) => {
@@ -143,7 +143,7 @@ function Employees() {
       { header: 'Date of Birth', key: 'date_of_birth', width: 18 },
       { header: 'Phone Number', key: 'phone', width: 18 },
       { header: 'Ghana Card', key: 'ghana_card', width: 22 },
-      { header: 'Employment Status', key: 'employment_status', width: 20 },
+      { header: 'Employment Status', key: 'employment_type', width: 28 },
       { header: 'Termination Date', key: 'termination_date', width: 18 },
     ];
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -156,7 +156,7 @@ function Employees() {
     sheet.dataValidations.add('H2:H1001', {
       type: 'list',
       allowBlank: false,
-      formulae: ['"active,inactive,terminated,on_leave"'],
+      formulae: ['"Full Time,Part Time Contract,National Service Intern"'],
     });
     for (let row = 2; row <= 1001; row++) {
       sheet.getRow(row).getCell(5).numFmt = '@';
@@ -203,7 +203,7 @@ function Employees() {
           date_of_birth: extractCell(row.getCell(findColumn('Date of Birth') || 5)),
           phone: extractCell(row.getCell(findColumn('Phone Number') || 6)),
           ghana_card: extractCell(row.getCell(findColumn('Ghana Card') || 7)),
-          employment_status: extractCell(row.getCell(findColumn('Employment Status') || 8)),
+          employment_type: extractCell(row.getCell(findColumn('Employment Status') || 8)),
           termination_date: extractCell(row.getCell(findColumn('Termination Date') || 9)),
         };
         if (Object.values(employee).every((value) => !value)) return;
@@ -286,11 +286,11 @@ function Employees() {
               <div><label>SSNIT Number</label><input type="text" value={formData.ssnit_number} onChange={e => setFormData({ ...formData, ssnit_number: e.target.value })} /></div>
               <div><label>Date of Birth</label><input type="date" value={formData.date_of_birth} onChange={e => setFormData({ ...formData, date_of_birth: e.target.value })} /></div>
               <div><label>Ghana Card</label><input type="text" value={formData.ghana_card} onChange={e => setFormData({ ...formData, ghana_card: e.target.value })} /></div>
-              <div><label>Employment Status</label><select value={formData.employment_status} onChange={e => setFormData({ ...formData, employment_status: e.target.value, is_active: e.target.value === 'active' })}>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="terminated">Terminated</option>
-                <option value="on_leave">On Leave</option>
+              <div><label>Employment Status</label><select value={formData.employment_type} onChange={e => setFormData({ ...formData, employment_type: e.target.value })}>
+                <option value="">Fill in later</option>
+                <option value="full_time">Full Time</option>
+                <option value="part_time_contract">Part Time Contract</option>
+                <option value="national_service_intern">National Service Intern</option>
               </select></div>
               <div><label>Termination Date</label><input type="date" value={formData.termination_date} onChange={e => setFormData({ ...formData, termination_date: e.target.value })} /></div>
             </div>
@@ -329,7 +329,7 @@ function Employees() {
                 <tbody>
                   {employees.map(emp => (
                     <tr key={emp.id} style={{ opacity: emp.is_active ? 1 : 0.6 }}>
-                      <td><strong>{emp.full_name}</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>{emp.role}</div></td>
+                      <td><strong>{emp.full_name}</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>{emp.role}</div><small>{String(emp.employment_type || '').replaceAll('_', ' ')}</small></td>
                       <td><span style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>
                         Staff: {emp.staff_id || '-'}<br />
                         SSNIT: {emp.ssnit_number || '-'}<br />
@@ -337,7 +337,7 @@ function Employees() {
                       </span></td>
                       <td><strong style={{ color: '#075e9a' }}>{formatMoney(Number(emp.basic_salary) + Number(emp.allowance) - Number(emp.deductions))}</strong></td>
                       <td><span style={{ fontSize: '0.85rem' }}>{emp.bank_name || '-'}<br/>{emp.bank_account || ''}</span></td>
-                      <td><span className={`status-pill ${emp.is_active ? 'present' : 'absent'}`}>{(emp.employment_status || (emp.is_active ? 'active' : 'inactive')).replace('_', ' ')}</span></td>
+                      <td><span className={`status-pill ${emp.is_active ? 'present' : 'absent'}`}>{emp.is_active ? 'Active' : 'Inactive'}</span></td>
                       <td>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                           <button type="button" className="btn-small btn-edit" onClick={() => handleEdit(emp)}>Edit</button>
@@ -368,7 +368,7 @@ function Employees() {
               </div>
             )}
             <p style={{ color: '#64748b', lineHeight: 1.6 }}>
-              All staff fields are optional and can be completed later. Rows with an existing Staff ID update that employee; rows without one create a new staff record. Completely blank spreadsheet rows are ignored.
+              All staff fields are optional and can be completed later. Employment Status may be Full Time, Part Time Contract, or National Service Intern. Rows with an existing Staff ID update that employee; rows without one create a new staff record. Completely blank spreadsheet rows are ignored.
             </p>
             <form onSubmit={handleBulkUpload}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', margin: '1rem 0' }}>

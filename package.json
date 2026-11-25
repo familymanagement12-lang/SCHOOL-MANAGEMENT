@@ -22,6 +22,7 @@
     "db:migrate:parent-portal": "node scripts/migrate_parent_portal.js",
     "db:migrate:curriculum-transition": "node scripts/migrate_curriculum_transition.js",
     "db:migrate:staff-bulk-upload": "node scripts/migrate_staff_bulk_upload.js",
+    "db:migrate:staff-employment-type": "node scripts/migrate_staff_employment_type.js",
     "db:migrate:student-auth": "node scripts/migrate_student_personalised_auth.js",
     "db:migrate:subject-timetable-extension": "node scripts/migrate_subject_timetable_extension.js",
     "db:migrate:timetable": "node scripts/migrate_timetable.js",

@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 
 const validEmploymentStatuses = new Set(['active', 'inactive', 'terminated', 'on_leave']);
+const validEmploymentTypes = new Set(['full_time', 'part_time_contract', 'national_service_intern']);
 const validDate = (value) => !value || (
   /^\d{4}-\d{2}-\d{2}$/.test(value)
   && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
@@ -12,6 +13,7 @@ const normalizeEmploymentStatus = (value) => {
   if (normalized === 'leave' || normalized === 'on_leave' || normalized === 'on leave') return 'on_leave';
   return validEmploymentStatuses.has(normalized) ? normalized : '';
 };
+const normalizeEmploymentType = (value) => cleanText(value).toLowerCase().replace(/[\s-]+/g, '_');
 
 const getEmployees = async (req, res, next) => {
   const { school_id } = req.user;
@@ -29,15 +31,17 @@ const getEmployees = async (req, res, next) => {
 const createEmployee = async (req, res, next) => {
   const { school_id } = req.user;
   const { full_name, role, phone, email, basic_salary, allowance, deductions, bank_name, bank_account,
-    staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, employment_status, termination_date } = req.body;
+    staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, employment_status, employment_type, termination_date } = req.body;
   const normalizedName = typeof full_name === 'string' ? full_name.trim() : '';
   const normalizedRole = typeof role === 'string' ? role.trim() : '';
   const normalizedStatus = normalizeEmploymentStatus(employment_status || 'active');
+  const normalizedType = employment_type ? normalizeEmploymentType(employment_type) : null;
 
   if (normalizedRole.length > 80) {
     return res.status(400).json({ message: 'Staff role must be 80 characters or fewer.' });
   }
   if (!normalizedStatus) return res.status(400).json({ message: 'Employment status must be active, inactive, terminated, or on leave.' });
+  if (normalizedType && !validEmploymentTypes.has(normalizedType)) return res.status(400).json({ message: 'Choose Full Time, Part Time Contract, or National Service Intern.' });
   if (!validDate(date_of_birth) || !validDate(termination_date)) {
     return res.status(400).json({ message: 'Date of birth and termination date must use YYYY-MM-DD format.' });
   }
@@ -46,11 +50,11 @@ const createEmployee = async (req, res, next) => {
     const result = await pool.query(
       `INSERT INTO employees (
         school_id, full_name, role, phone, email, basic_salary, allowance, deductions, bank_name, bank_account,
-        staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, employment_status, termination_date, is_active
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+        staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, employment_status, employment_type, termination_date, is_active
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
       [school_id, normalizedName, normalizedRole, phone, email, basic_salary || 0, allowance || 0, deductions || 0, bank_name, bank_account,
        cleanText(staff_id) || null, cleanText(pension_member_id) || null, cleanText(ssnit_number) || null,
-       date_of_birth || null, cleanText(ghana_card) || null, normalizedStatus, termination_date || null,
+       date_of_birth || null, cleanText(ghana_card) || null, normalizedStatus, normalizedType, termination_date || null,
        normalizedStatus === 'active']
     );
     res.status(201).json(result.rows[0]);
@@ -63,7 +67,7 @@ const updateEmployee = async (req, res, next) => {
   const { school_id } = req.user;
   const { id } = req.params;
   const { full_name, role, phone, email, basic_salary, allowance, deductions, bank_name, bank_account, is_active,
-    staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, employment_status, termination_date } = req.body;
+    staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, employment_status, employment_type, termination_date } = req.body;
   const normalizedRole = role === undefined ? undefined : (typeof role === 'string' ? role.trim() : '');
   if (normalizedRole && normalizedRole.length > 80) {
     return res.status(400).json({ message: 'Staff role must be 80 characters or fewer.' });
@@ -74,6 +78,12 @@ const updateEmployee = async (req, res, next) => {
   const normalizedStatus = employment_status === undefined ? undefined : normalizeEmploymentStatus(employment_status);
   if (employment_status !== undefined && !normalizedStatus) {
     return res.status(400).json({ message: 'Employment status must be active, inactive, terminated, or on leave.' });
+  }
+  const normalizedType = employment_type === undefined || employment_type === ''
+    ? (employment_type === '' ? null : undefined)
+    : normalizeEmploymentType(employment_type);
+  if (normalizedType && !validEmploymentTypes.has(normalizedType)) {
+    return res.status(400).json({ message: 'Choose Full Time, Part Time Contract, or National Service Intern.' });
   }
   if ((date_of_birth !== undefined && !validDate(date_of_birth))
     || (termination_date !== undefined && !validDate(termination_date))) {
@@ -95,11 +105,12 @@ const updateEmployee = async (req, res, next) => {
         date_of_birth = COALESCE(NULLIF($14, '')::date, date_of_birth),
         ghana_card = COALESCE($15, ghana_card),
         employment_status = COALESCE($16, employment_status),
-        termination_date = COALESCE(NULLIF($17, '')::date, termination_date)
-       WHERE id = $18 AND school_id = $19 RETURNING *`,
+        employment_type = COALESCE($17, employment_type),
+        termination_date = COALESCE(NULLIF($18, '')::date, termination_date)
+       WHERE id = $19 AND school_id = $20 RETURNING *`,
       [full_name, normalizedRole, phone, email, basic_salary, allowance, deductions, bank_name, bank_account, derivedActive,
        staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, effectiveStatus,
-       termination_date, id, school_id]
+       normalizedType, termination_date, id, school_id]
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Employee not found.' });
     res.json(result.rows[0]);
@@ -146,12 +157,12 @@ const bulkUpsertEmployees = async (req, res, next) => {
     }
     if (staffId) seenStaffIds.add(staffId.toUpperCase());
 
-    const statusValue = cleanText(row.employment_status || row['Employment Status']);
-    const status = statusValue ? normalizeEmploymentStatus(statusValue) : null;
+    const typeValue = cleanText(row.employment_type || row['Employment Status'] || row['Employment Type']);
+    const employmentType = typeValue ? normalizeEmploymentType(typeValue) : null;
     const dateOfBirth = cleanText(row.date_of_birth || row['Date of Birth']);
     const terminationDate = cleanText(row.termination_date || row['Termination Date']);
-    if (statusValue && !status) {
-      return res.status(400).json({ message: `Row ${index + 2}: Invalid employment status.` });
+    if (typeValue && !validEmploymentTypes.has(employmentType)) {
+      return res.status(400).json({ message: `Row ${index + 2}: Choose Full Time, Part Time Contract, or National Service Intern.` });
     }
     if (!validDate(dateOfBirth) || !validDate(terminationDate)) {
       return res.status(400).json({ message: `Row ${index + 2}: Dates must use YYYY-MM-DD format.` });
@@ -165,9 +176,8 @@ const bulkUpsertEmployees = async (req, res, next) => {
       dateOfBirth: dateOfBirth || null,
       phone: cleanText(row.phone || row['Phone Number']) || null,
       ghanaCard: cleanText(row.ghana_card || row['Ghana Card']) || null,
-      employmentStatus: status,
+      employmentType,
       terminationDate: terminationDate || null,
-      isActive: status ? status === 'active' : null,
       role: cleanText(row.role || row['Staff Role']) || null,
       email: cleanText(row.email || row['Email']) || null,
     });
@@ -195,12 +205,12 @@ const bulkUpsertEmployees = async (req, res, next) => {
              full_name=COALESCE(NULLIF($1,''),full_name), phone=COALESCE($2,phone),
              pension_member_id=COALESCE($3,pension_member_id), ssnit_number=COALESCE($4,ssnit_number),
              date_of_birth=COALESCE($5::date,date_of_birth), ghana_card=COALESCE($6,ghana_card),
-             employment_status=COALESCE($7,employment_status),
-             termination_date=COALESCE($8::date,termination_date), is_active=COALESCE($9,is_active),
-             role=COALESCE($10, role), email=COALESCE($11, email)
-           WHERE id=$12 AND school_id=$13`,
+             employment_type=COALESCE($7,employment_type),
+             termination_date=COALESCE($8::date,termination_date),
+             role=COALESCE($9, role), email=COALESCE($10, email)
+           WHERE id=$11 AND school_id=$12`,
           [row.fullName, row.phone, row.pensionMemberId, row.ssnitNumber, row.dateOfBirth,
-           row.ghanaCard, row.employmentStatus, row.terminationDate, row.isActive,
+           row.ghanaCard, row.employmentType, row.terminationDate,
            row.role, row.email, employee.id, school_id]
         );
 
@@ -216,11 +226,11 @@ const bulkUpsertEmployees = async (req, res, next) => {
           `INSERT INTO employees (
              school_id, staff_id, full_name, role, phone, email,
              pension_member_id, ssnit_number, date_of_birth, ghana_card,
-             employment_status, termination_date, is_active
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+             employment_status, employment_type, termination_date, is_active
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
           [school_id, row.staffId, row.fullName, row.role || '', row.phone, row.email,
            row.pensionMemberId, row.ssnitNumber, row.dateOfBirth, row.ghanaCard,
-           row.employmentStatus || 'active', row.terminationDate, row.isActive ?? true]
+           'active', row.employmentType, row.terminationDate, true]
         );
         await client.query(
           `INSERT INTO finance_audit_log

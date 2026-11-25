@@ -201,6 +201,7 @@ CREATE TABLE IF NOT EXISTS employees (
   date_of_birth DATE,
   ghana_card TEXT,
   employment_status TEXT DEFAULT 'active',
+  employment_type TEXT,
   termination_date DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
