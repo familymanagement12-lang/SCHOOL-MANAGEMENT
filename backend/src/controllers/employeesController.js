@@ -166,10 +166,6 @@ const bulkUpsertEmployees = async (req, res, next) => {
     const rawTerminationDate = cleanText(row.termination_date || row['Termination Date']);
     const dateOfBirth = normalizeBulkDate(rawDateOfBirth);
     const terminationDate = normalizeBulkDate(rawTerminationDate);
-    if (dateOfBirth === null || terminationDate === null) {
-      return res.status(400).json({ message: `Row ${index + 2}: Enter dates as DD/MM/YYYY.` });
-    }
-
     normalizedRows.push({
       staffId,
       fullName,
