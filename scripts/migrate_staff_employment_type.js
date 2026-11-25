@@ -9,14 +9,14 @@ async function main() {
   if (new URL(connectionString).hostname.includes('-pooler')) {
     throw new Error('Staff employment type migration requires a direct database connection.');
   }
-  const migration = fs.readFileSync(
-    path.join(__dirname, '../sql/migrations/20261125_staff_employment_type.sql'),
-    'utf8'
-  );
+  const migrations = [
+    '20261125_staff_employment_type.sql',
+    '20261125_staff_employment_type_freeform.sql',
+  ].map((file) => fs.readFileSync(path.join(__dirname, '../sql/migrations', file), 'utf8'));
   const pool = new Pool({ connectionString });
   try {
-    await pool.query(migration);
-    console.log('Staff employment type migration applied.');
+    for (const migration of migrations) await pool.query(migration);
+    console.log('Staff employment type migrations applied.');
   } finally {
     await pool.end();
   }

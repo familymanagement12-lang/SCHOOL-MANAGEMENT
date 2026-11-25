@@ -1,7 +1,6 @@
 const pool = require('../config/db');
 
 const validEmploymentStatuses = new Set(['active', 'inactive', 'terminated', 'on_leave']);
-const validEmploymentTypes = new Set(['full_time', 'part_time_contract', 'national_service_intern']);
 const validDate = (value) => !value || (
   /^\d{4}-\d{2}-\d{2}$/.test(value)
   && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
@@ -22,7 +21,6 @@ const normalizeEmploymentStatus = (value) => {
   if (normalized === 'leave' || normalized === 'on_leave' || normalized === 'on leave') return 'on_leave';
   return validEmploymentStatuses.has(normalized) ? normalized : '';
 };
-const normalizeEmploymentType = (value) => cleanText(value).toLowerCase().replace(/[\s-]+/g, '_');
 
 const getEmployees = async (req, res, next) => {
   const { school_id } = req.user;
@@ -44,13 +42,12 @@ const createEmployee = async (req, res, next) => {
   const normalizedName = typeof full_name === 'string' ? full_name.trim() : '';
   const normalizedRole = typeof role === 'string' ? role.trim() : '';
   const normalizedStatus = normalizeEmploymentStatus(employment_status || 'active');
-  const normalizedType = employment_type ? normalizeEmploymentType(employment_type) : null;
+  const normalizedType = cleanText(employment_type) || null;
 
   if (normalizedRole.length > 80) {
     return res.status(400).json({ message: 'Staff role must be 80 characters or fewer.' });
   }
   if (!normalizedStatus) return res.status(400).json({ message: 'Employment status must be active, inactive, terminated, or on leave.' });
-  if (normalizedType && !validEmploymentTypes.has(normalizedType)) return res.status(400).json({ message: 'Choose Full Time, Part Time Contract, or National Service Intern.' });
   if (!validDate(date_of_birth) || !validDate(termination_date)) {
     return res.status(400).json({ message: 'Date of birth and termination date must use YYYY-MM-DD format.' });
   }
@@ -88,12 +85,9 @@ const updateEmployee = async (req, res, next) => {
   if (employment_status !== undefined && !normalizedStatus) {
     return res.status(400).json({ message: 'Employment status must be active, inactive, terminated, or on leave.' });
   }
-  const normalizedType = employment_type === undefined || employment_type === ''
-    ? (employment_type === '' ? null : undefined)
-    : normalizeEmploymentType(employment_type);
-  if (normalizedType && !validEmploymentTypes.has(normalizedType)) {
-    return res.status(400).json({ message: 'Choose Full Time, Part Time Contract, or National Service Intern.' });
-  }
+  const normalizedType = employment_type === undefined
+    ? undefined
+    : (employment_type === null ? null : cleanText(employment_type) || null);
   if ((date_of_birth !== undefined && !validDate(date_of_birth))
     || (termination_date !== undefined && !validDate(termination_date))) {
     return res.status(400).json({ message: 'Date of birth and termination date must use YYYY-MM-DD format.' });
@@ -167,14 +161,11 @@ const bulkUpsertEmployees = async (req, res, next) => {
     if (staffId) seenStaffIds.add(staffId.toUpperCase());
 
     const typeValue = cleanText(row.employment_type || row['Employment Status'] || row['Employment Type']);
-    const employmentType = typeValue ? normalizeEmploymentType(typeValue) : null;
+    const employmentType = typeValue || null;
     const rawDateOfBirth = cleanText(row.date_of_birth || row['Date of Birth']);
     const rawTerminationDate = cleanText(row.termination_date || row['Termination Date']);
     const dateOfBirth = normalizeBulkDate(rawDateOfBirth);
     const terminationDate = normalizeBulkDate(rawTerminationDate);
-    if (typeValue && !validEmploymentTypes.has(employmentType)) {
-      return res.status(400).json({ message: `Row ${index + 2}: Choose Full Time, Part Time Contract, or National Service Intern.` });
-    }
     if (dateOfBirth === null || terminationDate === null) {
       return res.status(400).json({ message: `Row ${index + 2}: Enter dates as DD/MM/YYYY.` });
     }

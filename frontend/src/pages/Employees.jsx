@@ -153,11 +153,6 @@ function Employees() {
     sheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
     sheet.addRow(['Example', 'Jane Doe', 'PENSION-001', 'C1234567890', '20/05/1990', '0240000000', 'GHA-000000000-1', 'Full Time', '']);
     sheet.getRow(3).font = { italic: true, color: { argb: 'FF64748B' } };
-    sheet.dataValidations.add('H2:H1001', {
-      type: 'list',
-      allowBlank: true,
-      formulae: ['"Full Time,Part Time Contract,National Service Intern"'],
-    });
     for (let row = 2; row <= 1001; row++) {
       sheet.getRow(row).getCell(5).numFmt = '@';
       sheet.getRow(row).getCell(9).numFmt = '@';
@@ -286,12 +281,7 @@ function Employees() {
               <div><label>SSNIT Number</label><input type="text" value={formData.ssnit_number} onChange={e => setFormData({ ...formData, ssnit_number: e.target.value })} /></div>
               <div><label>Date of Birth</label><input type="date" value={formData.date_of_birth} onChange={e => setFormData({ ...formData, date_of_birth: e.target.value })} /></div>
               <div><label>Ghana Card</label><input type="text" value={formData.ghana_card} onChange={e => setFormData({ ...formData, ghana_card: e.target.value })} /></div>
-              <div><label>Employment Status</label><select value={formData.employment_type} onChange={e => setFormData({ ...formData, employment_type: e.target.value })}>
-                <option value="">Fill in later</option>
-                <option value="full_time">Full Time</option>
-                <option value="part_time_contract">Part Time Contract</option>
-                <option value="national_service_intern">National Service Intern</option>
-              </select></div>
+              <div><label>Employment Status</label><input type="text" value={formData.employment_type} onChange={e => setFormData({ ...formData, employment_type: e.target.value })} placeholder="Enter status as provided" /></div>
               <div><label>Termination Date</label><input type="date" value={formData.termination_date} onChange={e => setFormData({ ...formData, termination_date: e.target.value })} /></div>
             </div>
             
@@ -368,7 +358,7 @@ function Employees() {
               </div>
             )}
             <p style={{ color: '#64748b', lineHeight: 1.6 }}>
-              All staff fields are optional and can be completed later. Employment Status may be Full Time, Part Time Contract, or National Service Intern. Rows with an existing Staff ID update that employee; rows without one create a new staff record. Completely blank spreadsheet rows are ignored.
+              All staff fields are optional and can be completed later. Employment Status imports exactly as entered in the spreadsheet. Rows with an existing Staff ID update that employee; rows without one create a new staff record. Completely blank spreadsheet rows are ignored.
             </p>
             <form onSubmit={handleBulkUpload}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', margin: '1rem 0' }}>
