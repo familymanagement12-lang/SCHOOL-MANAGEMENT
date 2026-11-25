@@ -98,10 +98,10 @@ const updateEmployee = async (req, res, next) => {
         staff_id = COALESCE($11, staff_id),
         pension_member_id = COALESCE($12, pension_member_id),
         ssnit_number = COALESCE($13, ssnit_number),
-        date_of_birth = COALESCE($14::date, date_of_birth),
+        date_of_birth = COALESCE(NULLIF($14, '')::date, date_of_birth),
         ghana_card = COALESCE($15, ghana_card),
         employment_status = COALESCE($16, employment_status),
-        termination_date = COALESCE($17::date, termination_date)
+        termination_date = COALESCE(NULLIF($17, '')::date, termination_date)
        WHERE id = $18 AND school_id = $19 RETURNING *`,
       [full_name, normalizedRole, phone, email, basic_salary, allowance, deductions, bank_name, bank_account, derivedActive,
        staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, effectiveStatus,
@@ -145,15 +145,15 @@ const bulkUpsertEmployees = async (req, res, next) => {
   const seenStaffIds = new Set();
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index];
-    const staffId = cleanText(row.staff_id || row['Staff ID']);
+    const staffId = cleanText(row.staff_id || row['Staff ID']) || null;
     const fullName = cleanText(row.full_name || row.employee_name || row['Employee Name']);
-    if (!staffId || !fullName) {
-      return res.status(400).json({ message: `Row ${index + 2}: Staff ID and Employee Name are required.` });
+    if (!fullName) {
+      return res.status(400).json({ message: `Row ${index + 2}: Employee Name is required.` });
     }
-    if (seenStaffIds.has(staffId.toUpperCase())) {
+    if (staffId && seenStaffIds.has(staffId.toUpperCase())) {
       return res.status(400).json({ message: `Row ${index + 2}: Duplicate Staff ID "${staffId}".` });
     }
-    seenStaffIds.add(staffId.toUpperCase());
+    if (staffId) seenStaffIds.add(staffId.toUpperCase());
 
     const status = normalizeEmploymentStatus(row.employment_status || row['Employment Status'] || 'active');
     const dateOfBirth = cleanText(row.date_of_birth || row['Date of Birth']);
@@ -189,10 +189,12 @@ const bulkUpsertEmployees = async (req, res, next) => {
     let updated = 0;
 
     for (const row of normalizedRows) {
-      const existing = await client.query(
-        'SELECT * FROM employees WHERE school_id=$1 AND staff_id=$2',
-        [school_id, row.staffId]
-      );
+      const existing = row.staffId
+        ? await client.query(
+          'SELECT * FROM employees WHERE school_id=$1 AND staff_id=$2',
+          [school_id, row.staffId]
+        )
+        : { rows: [] };
 
       if (existing.rows.length) {
         const employee = existing.rows[0];

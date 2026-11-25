@@ -191,13 +191,13 @@ function Employees() {
       const findColumn = (...names) => names.map((name) => headers[name.toLowerCase()]).find(Boolean);
       const staffIdColumn = findColumn('Staff ID');
       const nameColumn = findColumn('Employee Name');
-      if (!staffIdColumn || !nameColumn) {
-        throw new Error('Required columns are missing: Staff ID and Employee Name.');
+      if (!nameColumn) {
+        throw new Error('Required column is missing: Employee Name. Staff ID is optional.');
       }
       const staff = [];
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
-        const staffId = extractCell(row.getCell(staffIdColumn));
+        const staffId = staffIdColumn ? extractCell(row.getCell(staffIdColumn)) : '';
         const employeeName = extractCell(row.getCell(nameColumn));
         if (!staffId && !employeeName) return;
         staff.push({
@@ -295,9 +295,7 @@ function Employees() {
                 <option value="terminated">Terminated</option>
                 <option value="on_leave">On Leave</option>
               </select></div>
-              {(formData.employment_status === 'terminated' || formData.termination_date) && (
-                <div><label>Termination Date</label><input type="date" value={formData.termination_date} onChange={e => setFormData({ ...formData, termination_date: e.target.value })} /></div>
-              )}
+              <div><label>Termination Date</label><input type="date" value={formData.termination_date} onChange={e => setFormData({ ...formData, termination_date: e.target.value })} /></div>
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -373,7 +371,7 @@ function Employees() {
               </div>
             )}
             <p style={{ color: '#64748b', lineHeight: 1.6 }}>
-              Staff ID and Employee Name are required. Existing Staff IDs update the employee record; new Staff IDs create staff records. Active records are included in payroll and staff attendance.
+              Employee Name is required. Staff ID, Pension Fund Member ID, SSNIT Number, and Termination Date may be left blank and filled in later. Rows with an existing Staff ID update that employee; rows without one are imported as new staff. Active records are included in payroll and staff attendance.
             </p>
             <form onSubmit={handleBulkUpload}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', margin: '1rem 0' }}>
