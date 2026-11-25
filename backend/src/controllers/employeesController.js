@@ -8,6 +8,15 @@ const validDate = (value) => !value || (
   && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
 );
 const cleanText = (value) => typeof value === 'string' ? value.trim() : '';
+const normalizeBulkDate = (value) => {
+  const text = cleanText(value);
+  if (!text) return '';
+  if (validDate(text)) return text;
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const isoDate = `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+  return validDate(isoDate) ? isoDate : null;
+};
 const normalizeEmploymentStatus = (value) => {
   const normalized = cleanText(value).toLowerCase().replace(/[\s-]+/g, '_');
   if (normalized === 'leave' || normalized === 'on_leave' || normalized === 'on leave') return 'on_leave';
@@ -159,13 +168,15 @@ const bulkUpsertEmployees = async (req, res, next) => {
 
     const typeValue = cleanText(row.employment_type || row['Employment Status'] || row['Employment Type']);
     const employmentType = typeValue ? normalizeEmploymentType(typeValue) : null;
-    const dateOfBirth = cleanText(row.date_of_birth || row['Date of Birth']);
-    const terminationDate = cleanText(row.termination_date || row['Termination Date']);
+    const rawDateOfBirth = cleanText(row.date_of_birth || row['Date of Birth']);
+    const rawTerminationDate = cleanText(row.termination_date || row['Termination Date']);
+    const dateOfBirth = normalizeBulkDate(rawDateOfBirth);
+    const terminationDate = normalizeBulkDate(rawTerminationDate);
     if (typeValue && !validEmploymentTypes.has(employmentType)) {
       return res.status(400).json({ message: `Row ${index + 2}: Choose Full Time, Part Time Contract, or National Service Intern.` });
     }
-    if (!validDate(dateOfBirth) || !validDate(terminationDate)) {
-      return res.status(400).json({ message: `Row ${index + 2}: Dates must use YYYY-MM-DD format.` });
+    if (dateOfBirth === null || terminationDate === null) {
+      return res.status(400).json({ message: `Row ${index + 2}: Enter dates as DD/MM/YYYY.` });
     }
 
     normalizedRows.push({

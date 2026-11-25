@@ -149,13 +149,13 @@ function Employees() {
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
     sheet.getRow(1).alignment = { horizontal: 'center' };
-    sheet.addRow(['', '', '', '', '', '', '', 'active', '']);
+    sheet.addRow(['', '', '', '', '', '', '', '', '']);
     sheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-    sheet.addRow(['Example', 'Jane Doe', 'PENSION-001', 'C1234567890', '1990-05-20', '0240000000', 'GHA-000000000-1', 'active', '']);
+    sheet.addRow(['Example', 'Jane Doe', 'PENSION-001', 'C1234567890', '20/05/1990', '0240000000', 'GHA-000000000-1', 'Full Time', '']);
     sheet.getRow(3).font = { italic: true, color: { argb: 'FF64748B' } };
     sheet.dataValidations.add('H2:H1001', {
       type: 'list',
-      allowBlank: false,
+      allowBlank: true,
       formulae: ['"Full Time,Part Time Contract,National Service Intern"'],
     });
     for (let row = 2; row <= 1001; row++) {
