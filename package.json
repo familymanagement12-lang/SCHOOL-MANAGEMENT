@@ -18,6 +18,7 @@
     "db:migrate:kitchen-weekly-operations": "node scripts/migrate_kitchen_weekly_operations.js",
     "db:migrate:feeding-officer-audit-edit": "node scripts/migrate_feeding_officer_audit_edit.js",
     "db:migrate:accountant-rls": "node scripts/migrate_accountant_rls_audit.js",
+    "db:migrate:finance-audit-runtime-insert": "node scripts/migrate_finance_audit_runtime_insert.js",
     "db:migrate:feeding": "node scripts/migrate_compulsory_feeding.js",
     "db:migrate:parent-portal": "node scripts/migrate_parent_portal.js",
     "db:migrate:curriculum-transition": "node scripts/migrate_curriculum_transition.js",
