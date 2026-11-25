@@ -50,15 +50,35 @@ test('deactivating an employee preserves their row and is scoped to the school',
   }
 });
 
-test('bulk staff upload requires Employee Name but allows a blank Staff ID', async () => {
-  const res = createResponse();
-  await bulkUpsertEmployees(
-    { user: { school_id: 3, id: 8, role: 'admin' }, body: { employees: [{ staff_id: '', full_name: '' }] } },
-    res,
-    assert.fail
-  );
-  assert.equal(res.statusCode, 400);
-  assert.match(res.body.message, /Employee Name is required/);
+test('bulk staff upload accepts a record with every staff field blank', async () => {
+  const originalConnect = pool.connect;
+  const statements = [];
+  pool.connect = async () => ({
+    query: async (sql, values) => {
+      statements.push({ sql, values });
+      if (/INSERT INTO employees/.test(sql) && /RETURNING \*/.test(sql)) {
+        return { rows: [{ id: 45, full_name: values[2], role: values[3] }] };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  });
+  try {
+    const res = createResponse();
+    await bulkUpsertEmployees(
+      { user: { school_id: 3, id: 8, role: 'admin' }, body: { employees: [{}] } },
+      res,
+      assert.fail
+    );
+    const insert = statements.find((entry) => /INSERT INTO employees/.test(entry.sql));
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.created, 1);
+    assert.equal(insert.values[1], null);
+    assert.equal(insert.values[2], '');
+    assert.equal(insert.values[3], '');
+  } finally {
+    pool.connect = originalConnect;
+  }
 });
 
 test('bulk staff upload validates duplicate Staff IDs', async () => {

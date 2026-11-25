@@ -36,7 +36,7 @@ function Employees() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkMessage, setBulkMessage] = useState({ type: '', text: '' });
   const [formData, setFormData] = useState({
-    full_name: '', role: 'Teacher', phone: '', email: '',
+    full_name: '', role: '', phone: '', email: '',
     basic_salary: 0, allowance: 0, deductions: 0,
     bank_name: '', bank_account: '', is_active: true,
     staff_id: '', pension_member_id: '', ssnit_number: '', date_of_birth: '',
@@ -66,7 +66,7 @@ function Employees() {
     const knownRole = STAFF_ROLES.includes(emp.role);
     setCustomRole(knownRole ? '' : emp.role);
     setFormData({
-      full_name: emp.full_name, role: knownRole ? emp.role : '__custom__', phone: emp.phone || '', email: emp.email || '',
+      full_name: emp.full_name || '', role: !emp.role ? '' : (knownRole ? emp.role : '__custom__'), phone: emp.phone || '', email: emp.email || '',
       basic_salary: emp.basic_salary, allowance: emp.allowance, deductions: emp.deductions,
       bank_name: emp.bank_name || '', bank_account: emp.bank_account || '', is_active: emp.is_active,
       staff_id: emp.staff_id || '', pension_member_id: emp.pension_member_id || '',
@@ -79,17 +79,13 @@ function Employees() {
   const handleCancel = () => {
     setEditingId(null);
     setCustomRole('');
-    setFormData({ full_name: '', role: 'Teacher', phone: '', email: '', basic_salary: 0, allowance: 0, deductions: 0, bank_name: '', bank_account: '', is_active: true, staff_id: '', pension_member_id: '', ssnit_number: '', date_of_birth: '', ghana_card: '', employment_status: 'active', termination_date: '' });
+    setFormData({ full_name: '', role: '', phone: '', email: '', basic_salary: 0, allowance: 0, deductions: 0, bank_name: '', bank_account: '', is_active: true, staff_id: '', pension_member_id: '', ssnit_number: '', date_of_birth: '', ghana_card: '', employment_status: 'active', termination_date: '' });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     const role = formData.role === '__custom__' ? customRole.trim() : formData.role;
-    if (!role) {
-      setError('Select a staff role or enter a custom job title.');
-      return;
-    }
     try {
       if (editingId) {
         await updateEmployee(editingId, { ...formData, role });
@@ -199,8 +195,7 @@ function Employees() {
         if (rowNumber === 1) return;
         const staffId = staffIdColumn ? extractCell(row.getCell(staffIdColumn)) : '';
         const employeeName = extractCell(row.getCell(nameColumn));
-        if (!staffId && !employeeName) return;
-        staff.push({
+        const employee = {
           staff_id: staffId,
           full_name: employeeName,
           pension_member_id: extractCell(row.getCell(findColumn('Pension Fund Member ID') || 3)),
@@ -208,9 +203,11 @@ function Employees() {
           date_of_birth: extractCell(row.getCell(findColumn('Date of Birth') || 5)),
           phone: extractCell(row.getCell(findColumn('Phone Number') || 6)),
           ghana_card: extractCell(row.getCell(findColumn('Ghana Card') || 7)),
-          employment_status: extractCell(row.getCell(findColumn('Employment Status') || 8)) || 'active',
+          employment_status: extractCell(row.getCell(findColumn('Employment Status') || 8)),
           termination_date: extractCell(row.getCell(findColumn('Termination Date') || 9)),
-        });
+        };
+        if (Object.values(employee).every((value) => !value)) return;
+        staff.push(employee);
       });
       if (!staff.length) throw new Error('No staff rows found in the workbook.');
       const response = await bulkUpsertEmployees(staff);
@@ -263,9 +260,10 @@ function Employees() {
             <div className="panel-heading"><div><p className="eyebrow">{editingId ? 'Edit Profile' : 'New Profile'}</p><h2>{editingId ? 'Update Staff' : 'Add Staff'}</h2></div></div>
             {error && <div className="error">{error}</div>}
             
-            <label>Full Name *</label><input type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} required />
-            <label htmlFor="staff-role">Staff Role / Job Title *</label>
-            <select id="staff-role" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })} required>
+            <label>Full Name</label><input type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} />
+            <label htmlFor="staff-role">Staff Role / Job Title</label>
+            <select id="staff-role" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
+              <option value="">Fill in later</option>
               {STAFF_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
               <option value="__custom__">Other (enter a job title)</option>
             </select>
@@ -277,7 +275,6 @@ function Employees() {
                 onChange={e => setCustomRole(e.target.value)}
                 placeholder="Enter staff job title"
                 aria-label="Custom staff job title"
-                required
               />
             )}
             <small>Job title for the staff record and payroll; it does not grant system access.</small>
@@ -371,7 +368,7 @@ function Employees() {
               </div>
             )}
             <p style={{ color: '#64748b', lineHeight: 1.6 }}>
-              Employee Name is required. Staff ID, Pension Fund Member ID, SSNIT Number, and Termination Date may be left blank and filled in later. Rows with an existing Staff ID update that employee; rows without one are imported as new staff. Active records are included in payroll and staff attendance.
+              All staff fields are optional and can be completed later. Rows with an existing Staff ID update that employee; rows without one create a new staff record. Completely blank spreadsheet rows are ignored.
             </p>
             <form onSubmit={handleBulkUpload}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', margin: '1rem 0' }}>

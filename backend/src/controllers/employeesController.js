@@ -34,9 +34,6 @@ const createEmployee = async (req, res, next) => {
   const normalizedRole = typeof role === 'string' ? role.trim() : '';
   const normalizedStatus = normalizeEmploymentStatus(employment_status || 'active');
 
-  if (!normalizedName || !normalizedRole) {
-    return res.status(400).json({ message: 'Full name and role are required.' });
-  }
   if (normalizedRole.length > 80) {
     return res.status(400).json({ message: 'Staff role must be 80 characters or fewer.' });
   }
@@ -68,9 +65,6 @@ const updateEmployee = async (req, res, next) => {
   const { full_name, role, phone, email, basic_salary, allowance, deductions, bank_name, bank_account, is_active,
     staff_id, pension_member_id, ssnit_number, date_of_birth, ghana_card, employment_status, termination_date } = req.body;
   const normalizedRole = role === undefined ? undefined : (typeof role === 'string' ? role.trim() : '');
-  if (normalizedRole !== undefined && !normalizedRole) {
-    return res.status(400).json({ message: 'Staff role is required.' });
-  }
   if (normalizedRole && normalizedRole.length > 80) {
     return res.status(400).json({ message: 'Staff role must be 80 characters or fewer.' });
   }
@@ -147,18 +141,16 @@ const bulkUpsertEmployees = async (req, res, next) => {
     const row = rows[index];
     const staffId = cleanText(row.staff_id || row['Staff ID']) || null;
     const fullName = cleanText(row.full_name || row.employee_name || row['Employee Name']);
-    if (!fullName) {
-      return res.status(400).json({ message: `Row ${index + 2}: Employee Name is required.` });
-    }
     if (staffId && seenStaffIds.has(staffId.toUpperCase())) {
       return res.status(400).json({ message: `Row ${index + 2}: Duplicate Staff ID "${staffId}".` });
     }
     if (staffId) seenStaffIds.add(staffId.toUpperCase());
 
-    const status = normalizeEmploymentStatus(row.employment_status || row['Employment Status'] || 'active');
+    const statusValue = cleanText(row.employment_status || row['Employment Status']);
+    const status = statusValue ? normalizeEmploymentStatus(statusValue) : null;
     const dateOfBirth = cleanText(row.date_of_birth || row['Date of Birth']);
     const terminationDate = cleanText(row.termination_date || row['Termination Date']);
-    if (!status) {
+    if (statusValue && !status) {
       return res.status(400).json({ message: `Row ${index + 2}: Invalid employment status.` });
     }
     if (!validDate(dateOfBirth) || !validDate(terminationDate)) {
@@ -175,7 +167,7 @@ const bulkUpsertEmployees = async (req, res, next) => {
       ghanaCard: cleanText(row.ghana_card || row['Ghana Card']) || null,
       employmentStatus: status,
       terminationDate: terminationDate || null,
-      isActive: status === 'active',
+      isActive: status ? status === 'active' : null,
       role: cleanText(row.role || row['Staff Role']) || null,
       email: cleanText(row.email || row['Email']) || null,
     });
@@ -200,9 +192,11 @@ const bulkUpsertEmployees = async (req, res, next) => {
         const employee = existing.rows[0];
         await client.query(
           `UPDATE employees SET
-             full_name=$1, phone=$2, pension_member_id=$3, ssnit_number=$4,
-             date_of_birth=$5::date, ghana_card=$6, employment_status=$7,
-             termination_date=$8::date, is_active=$9,
+             full_name=COALESCE(NULLIF($1,''),full_name), phone=COALESCE($2,phone),
+             pension_member_id=COALESCE($3,pension_member_id), ssnit_number=COALESCE($4,ssnit_number),
+             date_of_birth=COALESCE($5::date,date_of_birth), ghana_card=COALESCE($6,ghana_card),
+             employment_status=COALESCE($7,employment_status),
+             termination_date=COALESCE($8::date,termination_date), is_active=COALESCE($9,is_active),
              role=COALESCE($10, role), email=COALESCE($11, email)
            WHERE id=$12 AND school_id=$13`,
           [row.fullName, row.phone, row.pensionMemberId, row.ssnitNumber, row.dateOfBirth,
@@ -224,9 +218,9 @@ const bulkUpsertEmployees = async (req, res, next) => {
              pension_member_id, ssnit_number, date_of_birth, ghana_card,
              employment_status, termination_date, is_active
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-          [school_id, row.staffId, row.fullName, row.role || 'Staff', row.phone, row.email,
+          [school_id, row.staffId, row.fullName, row.role || '', row.phone, row.email,
            row.pensionMemberId, row.ssnitNumber, row.dateOfBirth, row.ghanaCard,
-           row.employmentStatus, row.terminationDate, row.isActive]
+           row.employmentStatus || 'active', row.terminationDate, row.isActive ?? true]
         );
         await client.query(
           `INSERT INTO finance_audit_log
