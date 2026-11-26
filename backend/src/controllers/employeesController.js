@@ -139,6 +139,33 @@ const deactivateEmployee = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+const deleteInactiveEmployee = async (req, res, next) => {
+  const { school_id } = req.user;
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `DELETE FROM employees
+       WHERE id=$1 AND school_id=$2 AND is_active=FALSE
+       RETURNING id`,
+      [id, school_id]
+    );
+    if (result.rows.length) {
+      return res.json({ message: 'Staff record and linked payroll history were permanently deleted.' });
+    }
+    const existing = await pool.query(
+      'SELECT is_active FROM employees WHERE id=$1 AND school_id=$2',
+      [id, school_id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ message: 'Employee not found.' });
+    return res.status(409).json({ message: 'Deactivate this staff member before permanently deleting the record.' });
+  } catch (error) {
+    if (error.code === '23503') {
+      return res.status(409).json({ message: 'This staff member has attendance history and cannot be permanently deleted. Keep the record deactivated to preserve attendance records.' });
+    }
+    return next(error);
+  }
+};
+
 const bulkUpsertEmployees = async (req, res, next) => {
   const { school_id, id: actorId, role: actorRole } = req.user;
   const rows = req.body?.employees;
@@ -258,4 +285,4 @@ const bulkUpsertEmployees = async (req, res, next) => {
   }
 };
 
-module.exports = { getEmployees, createEmployee, updateEmployee, deactivateEmployee, bulkUpsertEmployees };
+module.exports = { getEmployees, createEmployee, updateEmployee, deactivateEmployee, deleteInactiveEmployee, bulkUpsertEmployees };

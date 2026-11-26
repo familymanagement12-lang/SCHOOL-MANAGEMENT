@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { getEmployees, createEmployee, updateEmployee, deactivateEmployee, bulkUpsertEmployees } from '../api/employees';
+import { getEmployees, createEmployee, updateEmployee, deactivateEmployee, permanentlyDeleteEmployee, bulkUpsertEmployees } from '../api/employees';
 
 const STAFF_ROLES = [
   'Teacher',
@@ -115,6 +115,19 @@ function Employees() {
       await fetchEmployees();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reactivate employee.');
+    }
+  };
+
+  const handlePermanentDelete = async (employee) => {
+    const confirmed = window.confirm(
+      `Permanently delete ${employee.full_name || 'this staff record'}? Any linked payroll records and payroll deductions will also be deleted. Existing attendance history will prevent deletion. This cannot be undone.`
+    );
+    if (!confirmed) return;
+    try {
+      await permanentlyDeleteEmployee(employee.id);
+      await fetchEmployees();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to permanently delete staff record.');
     }
   };
 
@@ -340,7 +353,10 @@ function Employees() {
                           <button type="button" className="btn-small btn-edit" onClick={() => handleEdit(emp)}>Edit</button>
                           {emp.is_active
                             ? <button type="button" className="btn-small btn-delete" onClick={() => handleDelete(emp)}>Deactivate</button>
-                            : <button type="button" className="btn-small btn-secondary" onClick={() => handleReactivate(emp)}>Reactivate</button>}
+                            : <>
+                              <button type="button" className="btn-small btn-secondary" onClick={() => handleReactivate(emp)}>Reactivate</button>
+                              <button type="button" className="btn-small btn-delete" onClick={() => handlePermanentDelete(emp)}>Delete Permanently</button>
+                            </>}
                         </div>
                       </td>
                     </tr>
