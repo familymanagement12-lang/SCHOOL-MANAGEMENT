@@ -7,8 +7,9 @@ const { getUsers, createUser, changePassword, resetUserPassword, updateUser, ver
 // Public route (Must be defined before authenticated routes)
 router.get('/verify', verifyEmail);
 
-// Only Admins can create users; Teachers and librarians can view users for assignment tasks.
-router.get('/', authenticate, authorizeRoles('admin', 'teacher', 'librarian', 'inventory', 'storekeeper'), getUsers);
+// The school-wide account and role directory is admin-only. Assignment and
+// class features use their own school- and allocation-scoped metadata routes.
+router.get('/', authenticate, authorizeRoles('admin', 'inventory', 'store', 'storekeeper'), getUsers);
 router.post('/', authenticate, authorizeRoles('admin'), createUser);
 router.put('/change-password', authenticate, changePassword);
 router.post('/:id/reset-password', authenticate, authorizeRoles('admin'), resetUserPassword);

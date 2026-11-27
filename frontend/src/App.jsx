@@ -184,7 +184,7 @@ function App() {
         <Route path="library" element={<Library />} />
         <Route path="ai" element={<McCarthyAI />} />
         <Route path="announcements" element={<Announcements />} />
-        <Route path="users" element={<Users />} />
+        <Route path="users" element={<AllowedRoles roles={['admin']}><Users /></AllowedRoles>} />
         <Route path="parents" element={<AllowedRoles roles={['admin']}><ParentManagement /></AllowedRoles>} />
         <Route path="curriculum-selections" element={<AllowedRoles roles={['admin']}><CurriculumSelectionsAdmin /></AllowedRoles>} />
         <Route path="settings" element={<Settings />} />

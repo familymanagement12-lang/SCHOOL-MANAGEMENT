@@ -36,7 +36,7 @@ const sections = [
       { path: '/finance-audit', label: 'Finance audit trail', icon: FileBarChart2, roles: ['admin', 'accountant'] },
       { path: '/employees', label: 'Staff', icon: Users, roles: ['admin'] },
       { path: '/payroll', label: 'Payroll', icon: Activity, roles: ['admin', 'accountant'] },
-      { path: '/users', label: 'Teachers & roles', icon: Users, roles: ['admin', 'teacher'] },
+      { path: '/users', label: 'Teachers & roles', icon: Users, roles: ['admin'] },
       { path: '/parents', label: 'Parent accounts', icon: Users, roles: ['admin'] },
       { path: '/curriculum-selections', label: 'Curriculum selections', icon: GraduationCap, roles: ['admin'] },
       { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
