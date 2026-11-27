@@ -8,15 +8,27 @@ const {
   assertExactDefinitions,
   assertExactRuntimePrivileges,
   assertFunctionPrivileges,
+  assertAssignmentRecursionPostconditions,
 } = require('./migrate_learning_platform');
-const { authorizationPolicies, learningMaterialsPolicies, MATERIAL_CONSTRAINTS, MATERIAL_INDEXES, normalizeSqlDefinition } = require('./learningPlatformDefinitions');
+const {
+  authorizationPolicies,
+  authorizationPoliciesWithRecursionFix,
+  learningMaterialsPolicies,
+  assignmentRecursionFixPolicies,
+  assignmentRecipientStaffScopeFunctionBody,
+  MATERIAL_CONSTRAINTS,
+  MATERIAL_INDEXES,
+  normalizeSqlDefinition,
+} = require('./learningPlatformDefinitions');
 const authSql = fs.readFileSync(path.join(__dirname,'../sql/migrations/20261127_assignment_database_authorization.sql'),'utf8');
 const materialsSql = fs.readFileSync(path.join(__dirname,'../sql/migrations/20261127_learning_materials.sql'),'utf8');
+const recursionFixSql = fs.readFileSync(path.join(__dirname,'../sql/migrations/20261127_assignment_rls_recursion_fix.sql'),'utf8');
 const runner = fs.readFileSync(path.join(__dirname,'migrate_learning_platform.js'),'utf8');
 
 test('assignment authorization is role scoped, forced, and preserves the separate migration ledger', () => {
   assert.deepEqual(FOLLOW_UP_MIGRATIONS.map((item)=>item.name),[
     '20261127_assignment_database_authorization','20261127_learning_materials',
+    '20261127_assignment_rls_recursion_fix',
   ]);
   assert.match(authSql,/assignment_staff_scope/);
   assert.match(authSql,/DROP POLICY IF EXISTS learning_assignments_school_scope/);
@@ -30,6 +42,19 @@ test('assignment authorization is role scoped, forced, and preserves the separat
   assert.match(authSql,/mark\.school_id=assignment_mark_private_notes\.school_id/);
   assert.match(authSql,/INSERT INTO public\.app_schema_migrations/);
   assert.match(authSql,/assignment_database_authorization/);
+});
+test('assignment recipient staff policy breaks the cross-table RLS recursion safely', () => {
+  assert.match(recursionFixSql,/rolname=current_user AND rolbypassrls/);
+  assert.match(recursionFixSql,/SECURITY DEFINER[\s\S]*SET row_security = off/);
+  assert.match(recursionFixSql,/REVOKE ALL ON FUNCTION public\.assignment_recipient_staff_scope\(INTEGER,BIGINT\) FROM PUBLIC/);
+  assert.match(recursionFixSql,/CREATE POLICY assignment_recipients_staff_scope[\s\S]*assignment_recipient_staff_scope\(school_id,assignment_id\)/);
+  assert.match(recursionFixSql,/INSERT INTO public\.app_schema_migrations/);
+  assert.equal(assignmentRecursionFixPolicies.length,1);
+  assert.equal(assignmentRecursionFixPolicies[0].policyname,'assignment_recipients_staff_scope');
+  const fixed = authorizationPoliciesWithRecursionFix.find((policy) =>
+    policy.policyname === 'assignment_recipients_staff_scope');
+  assert.equal(fixed.qual,'public.assignment_recipient_staff_scope(school_id,assignment_id)');
+  assert.equal(fixed.with_check,fixed.qual);
 });
 test('runtime cannot select private marking notes from student-readable mark rows', () => {
   assert.match(authSql,/REVOKE ALL PRIVILEGES ON TABLE public\.learning_assignments/);
@@ -56,8 +81,39 @@ test('learning platform runner uses the shared target guard, lock and transactio
   assert.match(runner,/assertAssignmentSchemaPostconditions/);
   assert.match(runner,/assertAuthorizationPostconditions/);
   assert.match(runner,/assertLearningMaterialsPostconditions/);
+  assert.match(runner,/assertAssignmentRecursionPostconditions/);
   assert.match(runner,/Refusing assignment authorization migration/);
   assert.match(runner,/unrecorded material schema exists/);
+});
+
+test('recorded recursion-fix postconditions fail closed on function or policy drift', async () => {
+  const policy = assignmentRecursionFixPolicies[0];
+  const baseFunction = {
+    prosecdef:true,
+    proconfig:['search_path=pg_catalog, public','row_security=off'],
+    prosrc:assignmentRecipientStaffScopeFunctionBody,
+    owner:'neondb_owner',
+    lanname:'sql',
+    provolatile:'s',
+  };
+  const clientWith = ({ fn = baseFunction, actualPolicy = policy, grants = [
+    { grantee:'mccarthy_runtime_70aef860',privilege_type:'EXECUTE',is_grantable:false },
+    { grantee:'neondb_owner',privilege_type:'EXECUTE',is_grantable:true },
+  ], ledger = true } = {}) => ({ async query(sql) {
+    if (sql.includes('pg_get_function_identity_arguments')) return { rows:[fn],rowCount:fn ? 1 : 0 };
+    if (sql.includes('FROM pg_policies')) return { rows:[actualPolicy],rowCount:actualPolicy ? 1 : 0 };
+    if (sql.includes('aclexplode')) return { rows:grants,rowCount:grants.length };
+    if (sql.includes('app_schema_migrations')) return { rows:ledger ? [{ one:1 }] : [],rowCount:ledger ? 1 : 0 };
+    throw new Error('Unexpected recursion postcondition query.');
+  } });
+  await assert.doesNotReject(assertAssignmentRecursionPostconditions(clientWith()));
+  await assert.rejects(assertAssignmentRecursionPostconditions(clientWith({
+    fn:{ ...baseFunction,proconfig:['search_path=pg_catalog, public'] },
+  })),/SECURITY DEFINER function is missing or drifted/);
+  await assert.rejects(assertAssignmentRecursionPostconditions(clientWith({
+    actualPolicy:{ ...policy,qual:'true' },
+  })),/differs for policy/);
+  await assert.rejects(assertAssignmentRecursionPostconditions(clientWith({ ledger:false })),/ledger entry is missing/);
 });
 
 test('exact intended assignment and Learning Materials policies pass definition verification', () => {

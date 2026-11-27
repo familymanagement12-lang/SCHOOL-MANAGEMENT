@@ -135,9 +135,21 @@ function extractPolicies(sql) {
 
 const authorizationPolicies = extractPolicies(migrationSql('20261127_assignment_database_authorization.sql'));
 const learningMaterialsPolicies = extractPolicies(migrationSql('20261127_learning_materials.sql'));
+const assignmentRecursionFixPolicies = extractPolicies(migrationSql('20261127_assignment_rls_recursion_fix.sql'));
+const authorizationPoliciesWithRecursionFix = authorizationPolicies.map((policy) =>
+  policy.policyname === assignmentRecursionFixPolicies[0]?.policyname
+    ? assignmentRecursionFixPolicies[0]
+    : policy);
 const authorizationSql = migrationSql('20261127_assignment_database_authorization.sql');
 const staffScopeFunctionBody = authorizationSql.match(/AS\s+\$\$([\s\S]*?)\$\$/i)?.[1];
 if (!staffScopeFunctionBody) throw new Error('Could not extract the intended assignment staff-scope function body.');
+const recursionFixSql = migrationSql('20261127_assignment_rls_recursion_fix.sql');
+const assignmentRecipientStaffScopeFunctionBody = recursionFixSql.match(
+  /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.assignment_recipient_staff_scope[\s\S]*?AS\s+\$\$([\s\S]*?)\$\$/i
+)?.[1];
+if (!assignmentRecipientStaffScopeFunctionBody) {
+  throw new Error('Could not extract the intended assignment-recipient scope function body.');
+}
 
 const MATERIAL_CONSTRAINTS = Object.freeze({
   learning_materials_pkey: 'PRIMARY KEY (id)',
@@ -172,8 +184,11 @@ module.exports = {
   normalizeSqlDefinition,
   extractPolicies,
   authorizationPolicies,
+  authorizationPoliciesWithRecursionFix,
   learningMaterialsPolicies,
+  assignmentRecursionFixPolicies,
   staffScopeFunctionBody,
+  assignmentRecipientStaffScopeFunctionBody,
   MATERIAL_CONSTRAINTS,
   MATERIAL_INDEXES,
 };

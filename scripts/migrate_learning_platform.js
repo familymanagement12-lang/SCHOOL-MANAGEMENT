@@ -10,8 +10,11 @@ const { assertAssignmentSchemaPostconditions } = require('./migrate_learning_ass
 const {
   normalizeSqlDefinition,
   authorizationPolicies,
+  authorizationPoliciesWithRecursionFix,
   learningMaterialsPolicies,
+  assignmentRecursionFixPolicies,
   staffScopeFunctionBody,
+  assignmentRecipientStaffScopeFunctionBody,
   MATERIAL_CONSTRAINTS,
   MATERIAL_INDEXES,
 } = require('./learningPlatformDefinitions');
@@ -21,6 +24,7 @@ const FOLLOW_UP_MIGRATIONS = Object.freeze([
   // Use the 2026-11-27 remediation date; dependency order remains explicit here.
   { name: '20261127_assignment_database_authorization', file: '20261127_assignment_database_authorization.sql' },
   { name: '20261127_learning_materials', file: '20261127_learning_materials.sql' },
+  { name: '20261127_assignment_rls_recursion_fix', file: '20261127_assignment_rls_recursion_fix.sql' },
 ]);
 const MATERIAL_TABLES = ['learning_materials','learning_material_files'];
 const RUNTIME_ROLE = 'mccarthy_runtime_70aef860';
@@ -34,7 +38,7 @@ async function getRecordedMigrations(client) {
   );
   return new Set(rows.rows.map((row) => row.migration_name));
 }
-async function assertAuthorizationPostconditions(client) {
+async function assertAuthorizationPostconditions(client, { recursionFixed = false } = {}) {
   const relations = (await client.query(`
     SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,c.relowner::regrole::text AS owner
     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -66,7 +70,8 @@ async function assertAuthorizationPostconditions(client) {
   `, [['learning_assignments','assignment_recipients','assignment_submissions',
     'assignment_submission_versions','assignment_attachments','assignment_submission_files',
     'assignment_marks','assignment_audit_log','assignment_mark_private_notes']])).rows;
-  assertExactPolicies(policies, authorizationPolicies, 'Assignment authorization');
+  assertExactPolicies(policies, recursionFixed ? authorizationPoliciesWithRecursionFix : authorizationPolicies,
+    'Assignment authorization');
   const grants = (await client.query(`
     SELECT
       (has_table_privilege($1,'public.learning_assignments','SELECT')
@@ -138,6 +143,51 @@ async function assertFunctionPrivileges(client) {
       || runtime.length !== 1 || runtime[0].privilege_type !== 'EXECUTE' || runtime[0].is_grantable !== false) {
     throw new Error('Assignment authorization postcondition failed: function EXECUTE grants differ (PUBLIC execute is prohibited).');
   }
+}
+
+async function assertAssignmentRecursionPostconditions(client, { requireLedger = true } = {}) {
+  const fn = await client.query(`
+    SELECT p.prosecdef,p.proconfig,p.prosrc,p.proowner::regrole::text AS owner,l.lanname,p.provolatile
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    JOIN pg_language l ON l.oid=p.prolang
+    WHERE n.nspname='public' AND p.proname='assignment_recipient_staff_scope'
+      AND pg_get_function_identity_arguments(p.oid)='p_school_id integer, p_assignment_id bigint'
+  `);
+  const config = fn.rows[0]?.proconfig?.map((setting) => setting.replaceAll('"','').replaceAll(' ','').toLowerCase()).sort();
+  const expectedConfig = ['row_security=off','search_path=pg_catalog,public'];
+  if (fn.rowCount !== 1 || fn.rows[0].prosecdef !== true
+      || fn.rows[0].owner !== 'neondb_owner' || fn.rows[0].lanname !== 'sql'
+      || fn.rows[0].provolatile !== 's'
+      || normalizeSqlDefinition(fn.rows[0].prosrc) !== normalizeSqlDefinition(assignmentRecipientStaffScopeFunctionBody)
+      || JSON.stringify(config) !== JSON.stringify(expectedConfig)) {
+    throw new Error('Assignment RLS recursion postcondition failed: the scoped SECURITY DEFINER function is missing or drifted.');
+  }
+  const policies = (await client.query(`
+    SELECT tablename,policyname,permissive,roles,cmd,qual,with_check
+    FROM pg_policies WHERE schemaname='public' AND tablename='assignment_recipients'
+      AND policyname='assignment_recipients_staff_scope'
+  `)).rows;
+  assertExactPolicies(policies, assignmentRecursionFixPolicies, 'Assignment RLS recursion fix');
+  const grants = (await client.query(`
+    SELECT CASE WHEN acl.grantee=0 THEN 'PUBLIC' ELSE acl.grantee::regrole::text END AS grantee,
+      acl.privilege_type,acl.is_grantable
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) acl
+    WHERE n.nspname='public' AND p.proname='assignment_recipient_staff_scope'
+  `)).rows;
+  const runtime = grants.filter((grant) => grant.grantee === RUNTIME_ROLE);
+  const unexpected = grants.filter((grant) => ![RUNTIME_ROLE,'neondb_owner'].includes(grant.grantee));
+  if (grants.some((grant) => grant.grantee === 'PUBLIC') || unexpected.length
+      || runtime.length !== 1 || runtime[0].privilege_type !== 'EXECUTE' || runtime[0].is_grantable !== false) {
+    throw new Error('Assignment RLS recursion postcondition failed: SECURITY DEFINER function EXECUTE grants differ.');
+  }
+  if (requireLedger) {
+    const ledger = await client.query(
+      "SELECT 1 FROM public.app_schema_migrations WHERE migration_name='20261127_assignment_rls_recursion_fix'"
+    );
+    if (!ledger.rowCount) throw new Error('Assignment RLS recursion postcondition failed: migration ledger entry is missing.');
+  }
+  return true;
 }
 
 async function assertPrivateNotesConstraints(client) {
@@ -333,7 +383,8 @@ async function runLearningPlatformMigrations({
     const recorded = await getRecordedMigrations(client);
     const authRecorded = recorded.has(FOLLOW_UP_MIGRATIONS[0].name);
     const materialsRecorded = recorded.has(FOLLOW_UP_MIGRATIONS[1].name);
-    if (authRecorded) await assertAuthorizationPostconditions(client);
+    const recursionFixRecorded = recorded.has(FOLLOW_UP_MIGRATIONS[2].name);
+    if (authRecorded) await assertAuthorizationPostconditions(client, { recursionFixed:recursionFixRecorded });
     else {
       const baseline = (await client.query(`SELECT count(*)::INTEGER AS n FROM pg_policies
         WHERE schemaname='public' AND tablename=ANY($1::text[]) AND policyname LIKE '%_school_scope'`,
@@ -347,22 +398,28 @@ async function runLearningPlatformMigrations({
         WHERE relnamespace='public'::regnamespace AND relname=ANY($1::text[])`, [MATERIAL_TABLES]);
       if (existing.rowCount) throw new Error('Refusing learning materials migration: unrecorded material schema exists.');
     }
-    if (authRecorded && materialsRecorded) {
+    if (recursionFixRecorded) await assertAssignmentRecursionPostconditions(client);
+    if (authRecorded && materialsRecorded && recursionFixRecorded) {
       logger.log('Assignment database authorization and learning materials schema match their migration records.');
       return { applied: false, verified: true };
     }
     await runSqlTransaction(client, async () => {
       for (const migration of FOLLOW_UP_MIGRATIONS) {
-        const done = migration.name === FOLLOW_UP_MIGRATIONS[0].name ? authRecorded : materialsRecorded;
+        const done = recorded.has(migration.name);
         if (done) continue;
         const sql = fs.readFileSync(path.join(migrationsDirectory,migration.file),'utf8');
         await client.query(removeFileTransactionEnvelope(sql));
-        if (migration === FOLLOW_UP_MIGRATIONS[0]) await assertAuthorizationPostconditions(client);
-        else await assertLearningMaterialsPostconditions(client);
+        if (migration.name === FOLLOW_UP_MIGRATIONS[0].name) await assertAuthorizationPostconditions(client);
+        else if (migration.name === FOLLOW_UP_MIGRATIONS[1].name) await assertLearningMaterialsPostconditions(client);
+        else {
+          await assertAssignmentRecursionPostconditions(client);
+          await assertAuthorizationPostconditions(client, { recursionFixed:true });
+        }
       }
       await assertAssignmentSchemaPostconditions(client);
-      await assertAuthorizationPostconditions(client);
+      await assertAuthorizationPostconditions(client, { recursionFixed:true });
       await assertLearningMaterialsPostconditions(client);
+      await assertAssignmentRecursionPostconditions(client);
     });
     logger.log('Assignment authorization and learning materials migrations applied and verified.');
     return { applied: true, verified: true };
@@ -379,6 +436,7 @@ module.exports = {
   FOLLOW_UP_MIGRATIONS,
   assertAuthorizationPostconditions,
   assertLearningMaterialsPostconditions,
+  assertAssignmentRecursionPostconditions,
   assertExactPolicies,
   assertExactDefinitions,
   assertExactRuntimePrivileges,
