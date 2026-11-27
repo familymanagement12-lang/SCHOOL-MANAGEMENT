@@ -5,7 +5,7 @@ const requestContext = require('./requestContext');
 dotenv.config();
 
 const pool = new Pool({
-  connectionString: process.env.APP_DATABASE_URL || process.env.DATABASE_URL,
+  connectionString: process.env.APP_DATABASE_URL,
 });
 
 const originalConnect = pool.connect.bind(pool);
@@ -13,12 +13,28 @@ const verifiedClients = new WeakSet();
 const verifyRlsRole = async (client) => {
   if (verifiedClients.has(client)) return;
   const result = await client.query(
-    `SELECT r.rolsuper OR r.rolbypassrls AS bypasses_rls
+    `SELECT (
+       r.rolsuper OR r.rolbypassrls OR r.rolcreatedb OR r.rolcreaterole
+       OR EXISTS (
+         SELECT 1 FROM pg_roles owner_role
+         WHERE owner_role.rolname = 'neondb_owner'
+           AND pg_has_role(r.oid, owner_role.oid, 'MEMBER')
+       )
+       OR EXISTS (
+         SELECT 1 FROM pg_class owned
+         JOIN pg_namespace schema ON schema.oid = owned.relnamespace
+         WHERE schema.nspname = 'public' AND owned.relowner = r.oid
+       )
+       OR EXISTS (
+         SELECT 1 FROM pg_namespace schema
+         WHERE schema.nspname = 'public' AND schema.nspowner = r.oid
+       )
+     ) AS unsafe_role
      FROM pg_roles r
      WHERE r.rolname = current_user`
   );
-  if (!result.rows.length || result.rows[0].bypasses_rls) {
-    throw new Error('The application database role must not be a superuser or have BYPASSRLS. Configure APP_DATABASE_URL with a restricted role.');
+  if (!result.rows.length || result.rows[0].unsafe_role) {
+    throw new Error('The application database role must be non-owner, non-privileged, and unable to bypass RLS. Configure APP_DATABASE_URL with a restricted runtime role.');
   }
   verifiedClients.add(client);
 };

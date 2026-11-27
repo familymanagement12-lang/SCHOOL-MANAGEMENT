@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const parent = require('../controllers/parentPortalController');
+const assignments = require('../controllers/assignmentController');
 
 const router = express.Router();
 router.use(authenticate);
@@ -32,6 +33,7 @@ parentRoutes.get('/children/:studentId/results', parent.getResults);
 parentRoutes.get('/children/:studentId/attendance', parent.getAttendance);
 parentRoutes.get('/children/:studentId/timetable', parent.getTimetable);
 parentRoutes.get('/children/:studentId/announcements', parent.getAnnouncements);
+parentRoutes.get('/children/:studentId/assignments', assignments.getParentAssignments);
 parentRoutes.get('/receipts/:receiptId', parent.getReceipt);
 router.use('/', parentRoutes);
 

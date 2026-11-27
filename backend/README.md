@@ -3,9 +3,9 @@
 ## Setup
 
 1. Copy `.env.example` to `.env`
-2. Update `DATABASE_URL` and `JWT_SECRET`
+2. Set `APP_DATABASE_URL` to a restricted runtime login and `JWT_SECRET`. Keep owner credentials in a separate migration environment; the API does not read `DATABASE_URL`.
 3. Run `npm install`
-4. Create a PostgreSQL database and run `psql -d <your-db> -f sql/schema.sql`
+4. From the repository root, initialize the empty database with `npm run db:init`, then apply the protected timetable and learning-assignment migrations with their dedicated `npm run db:migrate:*` commands when approved. These guarded commands verify the configured target and connected migration identity. Do not execute `sql/schema.sql` or migration files directly with `psql`; direct SQL execution bypasses those safeguards.
 5. Start the server:
    - `npm run dev`
 

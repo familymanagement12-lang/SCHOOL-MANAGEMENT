@@ -1,7 +1,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../backend/.env') });
-const { Pool } = require('pg');
+const { withMigrationLock, runSqlTransaction } = require('./migrationSafety');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+let pool;
 const schoolName = process.env.DEMO_SCHOOL_NAME || 'The McCarthy Hill School';
 const academicYear = process.env.DEMO_ACADEMIC_YEAR || '2026/2027';
 const termName = process.env.DEMO_TERM || 'Term 1';
@@ -110,8 +110,7 @@ async function ensureRequirements(schoolId, termId) {
   return total;
 }
 
-(async () => {
-  try {
+async function setupTimetableDemo() {
     const school = await getSchool();
     const termId = await ensureTerm(school.id);
     if (!termId) {
@@ -128,10 +127,23 @@ async function ensureRequirements(schoolId, termId) {
     console.log(`Version id: ${version.id}`);
     console.log(`Weekly requirements set: ${requirementCount}`);
     console.log('The timetable draft is ready for generation in the app.');
-  } catch (error) {
+}
+
+async function main({ env = process.env, poolFactory, logger = console } = {}) {
+  if (env.ALLOW_TIMETABLE_DEMO_SETUP !== 'true' || env.MIGRATION_TARGET !== 'local') {
+    throw new Error('Timetable demo setup requires ALLOW_TIMETABLE_DEMO_SETUP=true and MIGRATION_TARGET=local.');
+  }
+  return withMigrationLock({ env, poolFactory, logger, action: async (client) => {
+    pool = client;
+    await runSqlTransaction(client, setupTimetableDemo);
+  } });
+}
+
+if (require.main === module) {
+  main().catch((error) => {
     console.error('Timetable setup failed:', error.message);
     process.exitCode = 1;
-  } finally {
-    await pool.end();
-  }
-})();
+  });
+}
+
+module.exports = { main };

@@ -23,6 +23,8 @@ const parentPortalRoutes = require('./parentPortal');
 const curriculumSelectionRoutes = require('./curriculumSelections');
 const feedingRoutes = require('./feeding');
 const operationsRoutes = require('./operations');
+const assignmentsRoutes = require('./assignments');
+const learningMaterialsRoutes = require('./learningMaterials');
 
 const router = express.Router();
 
@@ -34,6 +36,8 @@ router.use('/attendance', attendanceRoutes);
 router.use('/fees', feesRoutes);
 router.use('/feeding', feedingRoutes);
 router.use('/operations', operationsRoutes);
+router.use('/assignments', assignmentsRoutes);
+router.use('/learning-materials', learningMaterialsRoutes);
 router.use('/results', resultsRoutes);
 router.use('/users', usersRoutes);
 router.use('/announcements', announcementRoutes);

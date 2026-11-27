@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  Activity, Archive, BookOpen, CalendarDays, CircleDollarSign, ClipboardCheck,
+  Activity, Archive, BookOpen, CalendarDays, CircleDollarSign, ClipboardCheck, FileText,
   FileBarChart2, GraduationCap, LayoutDashboard, Megaphone, Settings, Users, Sparkles,
   WalletCards, X, Boxes
 } from 'lucide-react';
@@ -17,6 +17,8 @@ const sections = [
       { path: '/classes', label: 'Classes', icon: Archive, roles: ['admin', 'teacher'] },
       { path: '/subjects', label: 'Subjects', icon: BookOpen, roles: ['admin'] },
       { path: '/timetable', label: 'Timetable', icon: CalendarDays, roles: ['admin', 'teacher'] },
+      { path: '/assignments', label: 'Assignments', icon: FileText, roles: ['admin', 'teacher'] },
+      { path: '/learning-materials', label: 'Learning Materials', icon: BookOpen, roles: ['admin', 'teacher'] },
       { path: '/attendance', label: 'Attendance', icon: ClipboardCheck, roles: ['admin', 'teacher'] },
       { path: '/results', label: 'Results', icon: FileBarChart2, roles: ['admin', 'teacher'] },
       { path: '/library', label: 'Library', icon: BookOpen, roles: ['admin', 'librarian', 'teacher'] },

@@ -1,42 +1,70 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import Layout from './components/Layout';
-import Login from './pages/Login';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
-import TeacherDashboard from './pages/TeacherDashboard';
-import Students from './pages/Students';
-import Classes from './pages/Classes';
-import Subjects from './pages/Subjects';
-import Timetable from './pages/Timetable';
-import Attendance from './pages/Attendance';
-import Fees from './pages/Fees';
-import Results from './pages/Results';
-import ReportCard from './pages/ReportCard';
-import Announcements from './pages/Announcements';
-import Users from './pages/Users';
-import ChangePassword from './pages/ChangePassword';
-import Receipt from './pages/Receipt';
-import Settings from './pages/Settings';
-import Transactions from './pages/Transactions';
-import Inventory from './pages/Inventory';
-import Employees from './pages/Employees';
-import Payroll from './pages/Payroll';
-import Library from './pages/Library';
-import McCarthyAI from './pages/McCarthyAI';
-import FinanceDashboard from './pages/FinanceDashboard';
-import FinanceAudit from './pages/FinanceAudit';
-import Feeding from './pages/Feeding';
-import PaymentReceipt from './pages/PaymentReceipt';
-import OperationsRegisters from './pages/OperationsRegisters';
-import { ParentPortalLayout, ParentDashboard, ParentCurriculumSelection, ParentFees, ParentFeeding, ParentResults, ParentAttendance, ParentTimetable, ParentAnnouncements, ParentCommunication, ParentNotifications, ParentProfile } from './pages/ParentPortal';
-import ParentManagement from './pages/ParentManagement';
-import CurriculumSelectionsAdmin from './pages/CurriculumSelectionsAdmin';
-import {
-  StudentPortalLayout, StudentDashboard, StudentProfile, StudentSubjects, StudentTimetable,
-  StudentResults, StudentAttendance, StudentAnnouncements, StudentNotifications,
-  StudentUnavailableModule, StudentAccountSettings,
-} from './pages/StudentPortal';
+
+const pageModules = import.meta.glob(['./pages/*.jsx','./components/*.jsx']);
+const modulePath = (path) => path.endsWith('.jsx') ? path : `${path}.jsx`;
+const lazyPage = (path) => lazy(pageModules[modulePath(path)]);
+const lazyNamedPage = (path, name) => lazy(() => pageModules[modulePath(path)]().then((module) => ({ default: module[name] })));
+const Layout = lazyPage('./components/Layout');
+const Login = lazyPage('./pages/Login');
+const ForgotPassword = lazyPage('./pages/ForgotPassword');
+const ResetPassword = lazyPage('./pages/ResetPassword');
+const Dashboard = lazyPage('./pages/Dashboard');
+const TeacherDashboard = lazyPage('./pages/TeacherDashboard');
+const Students = lazyPage('./pages/Students');
+const Classes = lazyPage('./pages/Classes');
+const Subjects = lazyPage('./pages/Subjects');
+const Timetable = lazyPage('./pages/Timetable');
+const Attendance = lazyPage('./pages/Attendance');
+const Fees = lazyPage('./pages/Fees');
+const Results = lazyPage('./pages/Results');
+const ReportCard = lazyPage('./pages/ReportCard');
+const Announcements = lazyPage('./pages/Announcements');
+const Users = lazyPage('./pages/Users');
+const ChangePassword = lazyPage('./pages/ChangePassword');
+const Receipt = lazyPage('./pages/Receipt');
+const Settings = lazyPage('./pages/Settings');
+const Transactions = lazyPage('./pages/Transactions');
+const Inventory = lazyPage('./pages/Inventory');
+const Employees = lazyPage('./pages/Employees');
+const Payroll = lazyPage('./pages/Payroll');
+const Library = lazyPage('./pages/Library');
+const McCarthyAI = lazyPage('./pages/McCarthyAI');
+const FinanceDashboard = lazyPage('./pages/FinanceDashboard');
+const FinanceAudit = lazyPage('./pages/FinanceAudit');
+const Feeding = lazyPage('./pages/Feeding');
+const PaymentReceipt = lazyPage('./pages/PaymentReceipt');
+const OperationsRegisters = lazyPage('./pages/OperationsRegisters');
+const Assignments = lazyPage('./pages/Assignments');
+const StudentAssignments = lazyPage('./pages/StudentAssignments');
+const LearningMaterials = lazyPage('./pages/LearningMaterials');
+const StudentMaterials = lazyPage('./pages/StudentMaterials');
+const ParentPortalLayout = lazyNamedPage('./pages/ParentPortal','ParentPortalLayout');
+const ParentDashboard = lazyNamedPage('./pages/ParentPortal','ParentDashboard');
+const ParentCurriculumSelection = lazyNamedPage('./pages/ParentPortal','ParentCurriculumSelection');
+const ParentFees = lazyNamedPage('./pages/ParentPortal','ParentFees');
+const ParentFeeding = lazyNamedPage('./pages/ParentPortal','ParentFeeding');
+const ParentResults = lazyNamedPage('./pages/ParentPortal','ParentResults');
+const ParentAttendance = lazyNamedPage('./pages/ParentPortal','ParentAttendance');
+const ParentTimetable = lazyNamedPage('./pages/ParentPortal','ParentTimetable');
+const ParentAnnouncements = lazyNamedPage('./pages/ParentPortal','ParentAnnouncements');
+const ParentAssignments = lazyNamedPage('./pages/ParentPortal','ParentAssignments');
+const ParentCommunication = lazyNamedPage('./pages/ParentPortal','ParentCommunication');
+const ParentNotifications = lazyNamedPage('./pages/ParentPortal','ParentNotifications');
+const ParentProfile = lazyNamedPage('./pages/ParentPortal','ParentProfile');
+const ParentManagement = lazyPage('./pages/ParentManagement');
+const CurriculumSelectionsAdmin = lazyPage('./pages/CurriculumSelectionsAdmin');
+const StudentPortalLayout = lazyNamedPage('./pages/StudentPortal','StudentPortalLayout');
+const StudentDashboard = lazyNamedPage('./pages/StudentPortal','StudentDashboard');
+const StudentProfile = lazyNamedPage('./pages/StudentPortal','StudentProfile');
+const StudentSubjects = lazyNamedPage('./pages/StudentPortal','StudentSubjects');
+const StudentTimetable = lazyNamedPage('./pages/StudentPortal','StudentTimetable');
+const StudentResults = lazyNamedPage('./pages/StudentPortal','StudentResults');
+const StudentAttendance = lazyNamedPage('./pages/StudentPortal','StudentAttendance');
+const StudentAnnouncements = lazyNamedPage('./pages/StudentPortal','StudentAnnouncements');
+const StudentNotifications = lazyNamedPage('./pages/StudentPortal','StudentNotifications');
+const StudentUnavailableModule = lazyNamedPage('./pages/StudentPortal','StudentUnavailableModule');
+const StudentAccountSettings = lazyNamedPage('./pages/StudentPortal','StudentAccountSettings');
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('sms_token');
@@ -99,6 +127,7 @@ const RoleBasedDashboard = () => {
 
 function App() {
   return (
+    <Suspense fallback={<div className="page module-page"><div className="module-shell"><p className="data-panel" role="status">Loading page…</p></div></div>}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -112,8 +141,8 @@ function App() {
         <Route path="profile" element={<StudentProfile />} />
         <Route path="subjects" element={<StudentSubjects />} />
         <Route path="timetable" element={<StudentTimetable />} />
-        <Route path="assignments" element={<StudentUnavailableModule title="Assignments and Homework" />} />
-        <Route path="materials" element={<StudentUnavailableModule title="Learning Materials" />} />
+        <Route path="assignments" element={<StudentAssignments />} />
+        <Route path="materials" element={<StudentMaterials />} />
         <Route path="results" element={<StudentResults />} />
         <Route path="attendance" element={<StudentAttendance />} />
         <Route path="announcements" element={<StudentAnnouncements />} />
@@ -129,6 +158,7 @@ function App() {
         <Route path="attendance" element={<ParentAttendance />} />
         <Route path="timetable" element={<ParentTimetable />} />
         <Route path="announcements" element={<ParentAnnouncements />} />
+        <Route path="assignments" element={<ParentAssignments />} />
         <Route path="contact" element={<ParentCommunication />} />
         <Route path="notifications" element={<ParentNotifications />} />
         <Route path="profile" element={<ParentProfile />} />
@@ -139,6 +169,8 @@ function App() {
         <Route path="classes" element={<Classes />} />
         <Route path="subjects" element={<Subjects />} />
         <Route path="timetable" element={<Timetable />} />
+        <Route path="assignments" element={<AllowedRoles roles={['admin', 'teacher']}><Assignments /></AllowedRoles>} />
+        <Route path="learning-materials" element={<AllowedRoles roles={['admin', 'teacher']}><LearningMaterials /></AllowedRoles>} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="fees" element={<AllowedRoles roles={['admin', 'accountant']}><Fees /></AllowedRoles>} />
         <Route path="feeding" element={<AllowedRoles roles={['admin', 'accountant', 'feeding_tuckshop_officer']}><Feeding /></AllowedRoles>} />
@@ -159,6 +191,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }
 

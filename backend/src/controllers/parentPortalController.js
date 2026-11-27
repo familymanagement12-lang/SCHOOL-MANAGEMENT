@@ -355,7 +355,10 @@ const getResults = async (req, res, next) => {
        ORDER BY published_at DESC NULLS LAST, created_at DESC, subject`,
       [req.user.school_id, child.id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map((row) => ({
+      ...row,
+      historical_context_missing: !row.class_name_snapshot || !row.academic_year_snapshot,
+    })));
   } catch (error) {
     next(error);
   }

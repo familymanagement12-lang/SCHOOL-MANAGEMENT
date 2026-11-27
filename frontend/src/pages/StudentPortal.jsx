@@ -121,9 +121,20 @@ export function StudentDashboard() {
   const profile = data.profile;
   return (
     <PageFrame title={`Welcome, ${profile.name}`} description="Your personal school overview.">
+      {profile.curriculum_configuration_mismatch && <div className="error" role="alert">
+        Your class and student curriculum records do not match. Subject and timetable access is paused until an administrator reviews the assignment. Historical results remain available.
+      </div>}
       <section className="stats-grid">
         <Card label="Student ID" value={profile.student_id} note="Admission number" />
-        <Card label="Class" value={profile.class_name || 'Not assigned'} note={classStageLabel(profile.year_level, profile.curriculum)} />
+        <Card
+          label="Class"
+          value={profile.class_name || 'Not assigned'}
+          note={[
+            profile.education_stage && profile.education_stage !== 'UNASSIGNED' ? profile.education_stage.replaceAll('_', ' ') : 'Classification pending',
+            classStageLabel(profile.year_level, profile.class_curriculum, profile.education_stage),
+            profile.programme,
+          ].filter(Boolean).join(' · ')}
+        />
         <Card label="Curriculum" value={curriculumLabel(profile.curriculum)} note="Your assigned pathway" />
         <Card label="Attendance" value={`${data.attendance_percentage}%`} note="Present and late records" />
       </section>

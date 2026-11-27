@@ -21,6 +21,7 @@ const navItems = [
   { to: '/parent/results', label: 'Academic results', icon: GraduationCap },
   { to: '/parent/attendance', label: 'Attendance', icon: ClipboardCheck },
   { to: '/parent/timetable', label: 'Timetable', icon: CalendarDays },
+  { to: '/parent/assignments', label: 'Assignments', icon: BookOpenCheck },
   { to: '/parent/announcements', label: 'Announcements', icon: Megaphone },
   { to: '/parent/notifications', label: 'Notifications', icon: Bell },
   { to: '/parent/profile', label: 'My account', icon: UserRound },
@@ -477,7 +478,7 @@ export function ParentResults() {
     <LoadingPanel loading={loading} error={error}>{data.length ? <>
       <button className="parent-button secondary parent-print" onClick={() => window.print()}>Print / Save report</button>
       <div className="parent-panel parent-table-wrap"><table><thead><tr><th>Academic year · term</th><th>Class</th><th>Subject</th><th>Class assessment</th><th>Examination</th><th>Total</th><th>Published</th></tr></thead><tbody>
-        {data.map((row) => <tr key={row.id}><td>{row.academic_year_snapshot || selectedChild?.academic_year || '—'} · {row.term}</td><td>{row.class_name_snapshot || selectedChild?.class_name || '—'}</td><td>{row.subject}</td><td>{row.class_score ?? '—'}</td><td>{row.exam_score ?? '—'}</td><td><strong>{row.score}</strong></td><td>{row.published_at ? new Date(row.published_at).toLocaleDateString() : 'Published'}</td></tr>)}
+        {data.map((row) => <tr key={row.id}><td>{row.academic_year_snapshot || (row.historical_context_missing ? 'Historical year not recorded' : selectedChild?.academic_year || '—')} · {row.term}</td><td>{row.class_name_snapshot || (row.historical_context_missing ? 'Historical class not recorded' : selectedChild?.class_name || '—')}</td><td>{row.subject}</td><td>{row.class_score ?? '—'}</td><td>{row.exam_score ?? '—'}</td><td><strong>{row.score}</strong></td><td>{row.published_at ? new Date(row.published_at).toLocaleDateString() : 'Published'}</td></tr>)}
       </tbody></table></div>
     </> : <div className="parent-panel parent-empty">There are no published results for this child yet. Draft results are not visible.</div>}</LoadingPanel>
   </ParentPage></ChildRequired>;
@@ -515,6 +516,25 @@ export function ParentAnnouncements() {
     <LoadingPanel loading={loading} error={error}>{data.length ? data.map((item) => <article className="parent-panel parent-announcement" key={item.id}>
       <small>{new Date(item.created_at).toLocaleString()} · {item.sender_name || 'School'}</small><h2>{item.title}</h2><p>{item.message}</p>
     </article>) : <div className="parent-panel parent-empty">No announcements are available for this child.</div>}</LoadingPanel>
+  </ParentPage></ChildRequired>;
+}
+
+export function ParentAssignments() {
+  const { data, loading, error } = useChildResource('assignments', []);
+  return <ChildRequired><ParentPage title="Assignments" description="Read-only assignment status and feedback released by your child's teacher.">
+    <LoadingPanel loading={loading} error={error}>
+      {data.length ? <div className="parent-panel parent-table-wrap"><table><thead><tr>
+        <th>Assignment</th><th>Class / subject</th><th>Term</th><th>Due</th><th>Status</th><th>Mark and feedback</th>
+      </tr></thead><tbody>{data.map((item) => <tr key={item.id}>
+        <td><strong>{item.title}</strong><br />{item.category}</td>
+        <td>{item.class_name} · {item.subject_name}</td>
+        <td>{item.academic_year} · {item.term}</td>
+        <td>{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'Africa/Accra' }).format(new Date(item.due_at))}</td>
+        <td>{item.status}</td>
+        <td>{item.score != null ? <><strong>{item.score} / {item.total_marks}</strong>{item.feedback && <p>{item.feedback}</p>}</> : 'Not returned'}</td>
+      </tr>)}</tbody></table></div>
+        : <div className="parent-panel parent-empty">No published assignments are available for this child.</div>}
+    </LoadingPanel>
   </ParentPage></ChildRequired>;
 }
 

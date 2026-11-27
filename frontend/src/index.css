@@ -931,6 +931,10 @@ tbody tr:hover { background-color: #f8fafc; }
 .login-header { margin-bottom: 26px; text-align: left; }
 .login-header h2 { margin: 0 0 6px; color: #20392d; font-family: "Fraunces", Georgia, serif; font-size: 28px; font-weight: 600; letter-spacing: -.02em; }
 .login-header > p:last-child { color: #718078; font-size: 12px; }
+.login-mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: -8px 0 20px; padding: 4px; background: #f1f5f2; border-radius: 6px; }
+.login-mode-switch button { min-height: 38px; padding: 8px 10px; color: #527363; background: transparent; border: 0; border-radius: 4px; font: 700 11px "DM Sans", sans-serif; cursor: pointer; }
+.login-mode-switch button.active { color: #075e9a; background: #fff; box-shadow: 0 1px 3px rgba(27,54,39,.12); }
+.login-mode-switch button:focus-visible { outline: 2px solid #078fc4; outline-offset: 2px; }
 .login-card .auth-input-group label { color: #33483c; font-size: 10px; font-weight: 800; }
 .login-card .auth-input-group input { min-height: 42px; padding: 10px 12px; color: #20392d; background: #fbfcfb; border: 1px solid #dce5de; border-radius: 5px; font: 12px "DM Sans", sans-serif; }
 .login-card .auth-input-group input:focus { border-color: #078fc4; box-shadow: 0 0 0 3px rgba(7,143,196,.16); }

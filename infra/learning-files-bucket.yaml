@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private object storage for McCarthy Hill assignment and learning-material files.
+Parameters:
+  BucketName:
+    Type: String
+    Description: Globally unique S3 bucket name for school learning files.
+Resources:
+  LearningFilesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+      Tags:
+        - Key: Application
+          Value: McCarthyHillSchool
+  RequireTLS:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LearningFilesBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt LearningFilesBucket.Arn
+              - !Sub '${LearningFilesBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+  LearningFilesRuntimePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Scoped server-side access for the McCarthy Hill learning-files bucket.
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadWriteLearningFiles
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: !Sub '${LearningFilesBucket.Arn}/*'
+Outputs:
+  BucketName:
+    Value: !Ref LearningFilesBucket
+  BucketArn:
+    Value: !GetAtt LearningFilesBucket.Arn
+  RuntimeManagedPolicyArn:
+    Value: !Ref LearningFilesRuntimePolicy

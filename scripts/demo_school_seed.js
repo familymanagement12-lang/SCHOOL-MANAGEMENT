@@ -1,9 +1,9 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../backend/.env') });
-const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const { withMigrationLock, runSqlTransaction } = require('./migrationSafety');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+let pool;
 const schoolName = process.env.DEMO_SCHOOL_NAME || 'The McCarthy Hill School';
 const academicYear = process.env.DEMO_ACADEMIC_YEAR || '2026/2027';
 const termName = process.env.DEMO_TERM || 'Term 1';
@@ -185,8 +185,7 @@ async function seedStudents(schoolId, classId, className, totalStudents) {
   }
 }
 
-(async () => {
-  try {
+async function seedDemoSchool() {
     const school = await ensureSchool();
     const schoolId = school.id;
     const termId = await ensureTerm(schoolId);
@@ -231,10 +230,26 @@ async function seedStudents(schoolId, classId, className, totalStudents) {
     console.log(`Teachers: ${Object.keys(classTeacherIds).length + Object.keys(subjectTeacherIds).length}`);
     console.log('Default teacher password for all demo teachers: Teacher@1234');
     console.log('Open the app and log in with the administrator account to view the demo data.');
-  } catch (error) {
+}
+
+async function main({ env = process.env, poolFactory, logger = console } = {}) {
+  if (env.ALLOW_DEMO_SEED !== 'true') {
+    throw new Error('Demo records are disabled by default. Set ALLOW_DEMO_SEED=true only for an isolated local database.');
+  }
+  if (env.MIGRATION_TARGET !== 'local') {
+    throw new Error('Demo records may only be created in the explicitly selected local target.');
+  }
+  return withMigrationLock({ env, poolFactory, logger, action: async (client) => {
+    pool = client;
+    await runSqlTransaction(client, seedDemoSchool);
+  } });
+}
+
+if (require.main === module) {
+  main().catch((error) => {
     console.error('Demo seeding failed:', error.message);
     process.exitCode = 1;
-  } finally {
-    await pool.end();
-  }
-})();
+  });
+}
+
+module.exports = { main };
