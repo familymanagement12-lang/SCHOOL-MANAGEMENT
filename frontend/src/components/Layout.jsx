@@ -13,7 +13,7 @@ function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pageTitles = {
     '/': 'Overview', '/ai': 'McCarthy AI', '/library': 'Library management', '/inventory': 'School inventory',
-    '/students': 'Students', '/classes': 'Classes', '/attendance': 'Attendance',
+    '/students': 'Students', '/classes': 'Classes', '/attendance': 'Attendance', '/assignments': 'Assignments',
     '/results': 'Results', '/timetable': 'Term timetable', '/users': 'Accounts & roles',
     '/announcements': 'Announcements', '/fees': 'Fees', '/transactions': 'Finance', '/finance-audit': 'Finance audit trail',
     '/employees': 'Staff', '/payroll': 'Payroll', '/settings': 'Settings',

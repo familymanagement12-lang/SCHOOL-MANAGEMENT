@@ -1,6 +1,2 @@
-BEGIN;
-
 ALTER TABLE classes
   ALTER COLUMN year_level DROP NOT NULL;
-
-COMMIT;

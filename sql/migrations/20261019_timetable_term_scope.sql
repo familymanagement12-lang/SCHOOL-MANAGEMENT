@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE TABLE IF NOT EXISTS timetable_terms (
   id SERIAL PRIMARY KEY,
   school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
@@ -136,12 +134,95 @@ BEGIN
   END LOOP;
 END $$;
 
-ALTER TABLE teacher_subject_assignments DROP CONSTRAINT IF EXISTS teacher_subject_assignments_school_id_teacher_id_subject_id_class_id_key;
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'teacher_subject_assignments_term_unique') THEN
-    ALTER TABLE teacher_subject_assignments ADD CONSTRAINT teacher_subject_assignments_term_unique UNIQUE (school_id, term_id, teacher_id, subject_id, class_id);
+DO $$
+DECLARE
+  old_definition TEXT;
+  term_definition TEXT;
+  alternate_name TEXT;
+  alternate_definition TEXT;
+BEGIN
+  SELECT unique_object.object_name, unique_object.definition
+  INTO alternate_name, alternate_definition
+  FROM (
+    SELECT c.conname AS object_name,
+           pg_get_constraintdef(c.oid) AS definition,
+           ARRAY(
+             SELECT a.attname::TEXT
+             FROM unnest(c.conkey) AS key(attnum)
+             JOIN pg_attribute a
+               ON a.attrelid = c.conrelid AND a.attnum = key.attnum
+             ORDER BY a.attname
+           ) AS key_columns,
+           TRUE AS is_constraint
+    FROM pg_constraint c
+    WHERE c.conrelid = 'public.teacher_subject_assignments'::regclass
+      AND c.contype = 'u'
+    UNION ALL
+    SELECT index_class.relname AS object_name,
+           pg_get_indexdef(i.indexrelid) AS definition,
+           ARRAY(
+             SELECT a.attname::TEXT
+             FROM unnest(i.indkey) WITH ORDINALITY AS key(attnum, ordinal)
+             JOIN pg_attribute a
+               ON a.attrelid = i.indrelid AND a.attnum = key.attnum
+             WHERE key.ordinal <= i.indnkeyatts
+             ORDER BY a.attname
+           ) AS key_columns,
+           FALSE AS is_constraint
+    FROM pg_index i
+    JOIN pg_class index_class ON index_class.oid = i.indexrelid
+    WHERE i.indrelid = 'public.teacher_subject_assignments'::regclass
+      AND i.indisunique
+      AND i.indpred IS NULL
+      AND i.indexprs IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_constraint c WHERE c.conindid = i.indexrelid
+      )
+  ) unique_object
+  WHERE unique_object.key_columns =
+        ARRAY['class_id', 'school_id', 'subject_id', 'teacher_id']::TEXT[]
+    AND NOT (
+      unique_object.is_constraint
+      AND unique_object.object_name = 'teacher_subject_assignments_school_id_teacher_id_subject_id_key'
+    )
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION
+      'Equivalent legacy teacher-subject uniqueness exists under unexpected object "%": observed "%". Expected only the known constraint teacher_subject_assignments_school_id_teacher_id_subject_id_key with definition "UNIQUE (school_id, teacher_id, subject_id, class_id)"; no unknown object was dropped.',
+      alternate_name, alternate_definition;
   END IF;
-END $$;
+
+  SELECT pg_get_constraintdef(oid) INTO old_definition
+  FROM pg_constraint
+  WHERE conrelid = 'public.teacher_subject_assignments'::regclass
+    AND conname = 'teacher_subject_assignments_school_id_teacher_id_subject_id_key'
+    AND contype = 'u';
+
+  IF old_definition = 'UNIQUE (school_id, teacher_id, subject_id, class_id)' THEN
+    ALTER TABLE public.teacher_subject_assignments
+      DROP CONSTRAINT teacher_subject_assignments_school_id_teacher_id_subject_id_key;
+  ELSIF old_definition IS NOT NULL THEN
+    RAISE EXCEPTION
+      'Constraint teacher_subject_assignments_school_id_teacher_id_subject_id_key has an unexpected definition; manual review is required.';
+  END IF;
+
+  SELECT pg_get_constraintdef(oid) INTO term_definition
+  FROM pg_constraint
+  WHERE conrelid = 'public.teacher_subject_assignments'::regclass
+    AND conname = 'teacher_subject_assignments_term_unique'
+    AND contype = 'u';
+
+  IF term_definition IS NULL THEN
+    ALTER TABLE public.teacher_subject_assignments
+      ADD CONSTRAINT teacher_subject_assignments_term_unique
+      UNIQUE (school_id, term_id, teacher_id, subject_id, class_id);
+  ELSIF term_definition <> 'UNIQUE (school_id, term_id, teacher_id, subject_id, class_id)' THEN
+    RAISE EXCEPTION
+      'Constraint teacher_subject_assignments_term_unique has an unexpected definition; manual review is required.';
+  END IF;
+END
+$$;
 ALTER TABLE subject_weekly_requirements DROP CONSTRAINT IF EXISTS subject_weekly_requirements_school_id_class_id_subject_id_key;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'subject_weekly_requirements_term_unique') THEN
@@ -204,5 +285,3 @@ ALTER TABLE timetables ALTER COLUMN class_id DROP NOT NULL;
 ALTER TABLE timetables DROP CONSTRAINT IF EXISTS timetables_class_id_fkey;
 ALTER TABLE timetables ADD CONSTRAINT timetables_class_id_fkey
   FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL;
-
-COMMIT;

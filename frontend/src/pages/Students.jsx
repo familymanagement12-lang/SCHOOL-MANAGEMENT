@@ -13,6 +13,7 @@ const emptyForm = {
   dob: '',
   allergies: '',
   disability: '',
+  change_reason: '',
 };
 
 const isCurrentUserAdmin = () => {
@@ -32,6 +33,7 @@ function Students() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [credentialsModal, setCredentialsModal] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [originalClassId, setOriginalClassId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [accountFilter, setAccountFilter] = useState('');
@@ -87,12 +89,14 @@ function Students() {
         const response = await getStudentById(student.id);
         const detail = response.data;
         setEditingId(detail.id);
+        setOriginalClassId(detail.class_id || '');
         setFormData({
           name: detail.name,
           class_id: detail.class_id || '',
           dob: detail.dob || '',
           allergies: detail.allergies || '',
           disability: detail.disability || '',
+          change_reason: '',
         });
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to load student details.');
@@ -100,6 +104,7 @@ function Students() {
       }
     } else {
       setEditingId(null);
+      setOriginalClassId('');
       setFormData(emptyForm);
     }
     setShowModal(true);
@@ -108,6 +113,7 @@ function Students() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingId(null);
+    setOriginalClassId('');
     setFormData(emptyForm);
   };
 
@@ -115,6 +121,8 @@ function Students() {
     const { name, value } = event.target;
     setFormData({ ...formData, [name]: value });
   };
+  const isClassChanging = Boolean(editingId)
+    && String(formData.class_id || '') !== String(originalClassId || '');
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -131,6 +139,7 @@ function Students() {
             name: res.data.name,
             username: res.data.username,
             password: res.data.studentPassword,
+            account_active: res.data.account_active,
           });
         }
       }
@@ -173,7 +182,9 @@ function Students() {
         name: data.name,
         username: data.username,
         password: data.temporary_password,
+        account_active: data.account_active,
       });
+      await fetchPageData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reset student password.');
     }
@@ -261,7 +272,12 @@ function Students() {
                       <strong>{student.name}</strong>
                     </td>
                     <td>{student.class_name || 'Unassigned'}</td>
-                    <td>{student.curriculum === 'PEARSON' ? 'Pearson' : student.curriculum || 'Unassigned'}</td>
+                    <td>
+                      {student.curriculum === 'PEARSON' ? 'Pearson' : student.curriculum || 'Unassigned'}
+                      {student.class_curriculum && student.class_curriculum !== student.curriculum
+                        ? <small style={{ display: 'block', color: '#b45309' }}>Class curriculum: {student.class_curriculum} · review needed</small>
+                        : null}
+                    </td>
                     <td>{student.account_user_id ? (student.account_active ? 'Active' : 'Inactive') : 'Not linked'}</td>
                     <td><span style={{ fontWeight: 600, color: '#1e3a8a' }}>{student.username || '-'}</span></td>
                     <td>{student.must_change_password ? 'Required' : 'Complete'}</td>
@@ -319,6 +335,18 @@ function Students() {
                     ))}
                   </select>
                 </div>
+                {isClassChanging && <div style={{ gridColumn: '1 / -1' }}>
+                  <label>Reason for class change *</label>
+                  <textarea
+                    name="change_reason"
+                    value={formData.change_reason}
+                    onChange={handleInputChange}
+                    minLength={5}
+                    required
+                    rows={2}
+                    placeholder="Explain why this student is changing class"
+                  />
+                </div>}
 
                 <div>
                   <label>Date of Birth</label>
@@ -351,7 +379,11 @@ function Students() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px', textAlign: 'center' }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎉</div>
             <h2 style={{ color: '#0f172a', marginBottom: '0.5rem' }}>Student Portal Credentials</h2>
-            <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>Share these credentials privately. The student will be asked to change the temporary password after signing in.</p>
+            <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
+              {credentialsModal.account_active
+                ? 'The student portal is active. Share these credentials privately; the student will be asked to change the temporary password after signing in.'
+                : 'Share these credentials privately. Activate the student portal from the student list before the student signs in.'}
+            </p>
             
             <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'left', marginBottom: '1.5rem' }}>
               <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#64748b' }}>Student ID:</p>

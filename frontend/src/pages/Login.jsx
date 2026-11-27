@@ -4,7 +4,8 @@ import { login } from '../api/auth';
 import { setAuthToken } from '../api/api';
 
 function Login() {
-  const [email, setEmail] = useState('');
+  const [loginMode, setLoginMode] = useState('student');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -20,7 +21,7 @@ function Login() {
     setIsLoading(true);
 
     try {
-      const response = await login({ identifier: email, password });
+      const response = await login({ identifier, password });
       const { token, user } = response.data;
       localStorage.setItem('sms_token', token);
       if (user) localStorage.setItem('user', JSON.stringify(user));
@@ -60,30 +61,36 @@ function Login() {
         <div className="auth-form-container login-card">
           <div className="auth-header login-header">
             <p className="login-kicker">The McCarthy Hill School</p>
-            <h2>{greeting}</h2>
-            <p>Sign in to continue to your account.</p>
+            <h2>{loginMode === 'student' ? 'Student sign in' : greeting}</h2>
+            <p>{loginMode === 'student' ? 'Use your personalized school username and password to open your student portal.' : 'Sign in to continue to your account.'}</p>
+          </div>
+
+          <div className="login-mode-switch" role="group" aria-label="Choose account type">
+            <button type="button" className={loginMode === 'student' ? 'active' : ''} aria-pressed={loginMode === 'student'} onClick={() => { setLoginMode('student'); setError(''); setIdentifier(''); setPassword(''); }}>Student</button>
+            <button type="button" className={loginMode === 'other' ? 'active' : ''} aria-pressed={loginMode === 'other'} onClick={() => { setLoginMode('other'); setError(''); setIdentifier(''); setPassword(''); }}>Staff &amp; parents</button>
           </div>
 
           {error && <div className="error-msg shake login-error" role="alert">{error}</div>}
 
           <form onSubmit={handleSubmit}>
             <div className="auth-input-group">
-              <label htmlFor="login-identifier">Username, email, or registered phone</label>
+              <label htmlFor="login-identifier">{loginMode === 'student' ? 'Student username' : 'Username, email, or registered phone'}</label>
               <input
                 id="login-identifier"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                value={identifier}
+                onChange={(event) => setIdentifier(event.target.value)}
                 type="text"
+                autoFocus={loginMode === 'student'}
                 autoComplete="username"
                 required
-                placeholder="Personalised username or email"
+                placeholder={loginMode === 'student' ? 'e.g. gideon.akussah' : 'Username, email, or phone'}
               />
             </div>
 
             <div className="auth-input-group">
               <div className="login-password-label">
                 <label htmlFor="login-password">Password</label>
-                <Link to="/forgot-password">Forgot password?</Link>
+                {loginMode === 'other' && <Link to="/forgot-password">Forgot password?</Link>}
               </div>
               <div className="login-password-input">
                 <input
@@ -93,7 +100,7 @@ function Login() {
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   required
-                  placeholder="Enter your password"
+                  placeholder={loginMode === 'student' ? 'Temporary password or your new password' : 'Enter your password'}
                 />
                 <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
                   {showPassword ? 'Hide' : 'Show'}
@@ -107,7 +114,9 @@ function Login() {
             </button>
           </form>
 
-          <p className="auth-footer login-footer">Need an account? Contact the school administrator.</p>
+          {loginMode === 'student'
+            ? <p className="auth-footer login-footer">First time signing in? Use the temporary password given by the school (usually your date of birth as DDMMYYYY); you will be asked to change it. If you have not received a username or your account is inactive, ask the school office for help.</p>
+            : <p className="auth-footer login-footer">Need an account? Contact the school administrator.</p>}
         </div>
       </section>
     </main>

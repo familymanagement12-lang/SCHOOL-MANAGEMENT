@@ -1,5 +1,3 @@
-BEGIN;
-
 ALTER TABLE classes ALTER COLUMN class_teacher_id DROP NOT NULL;
 
 CREATE OR REPLACE FUNCTION validate_class_teacher_assignment() RETURNS trigger AS $$
@@ -20,5 +18,3 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-COMMIT;

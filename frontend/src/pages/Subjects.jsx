@@ -16,14 +16,20 @@ function Subjects() {
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
-    name: '', code: '', curricula: ['COMMON'], is_active: true,
+    name: '', code: '', curricula: [], is_active: true,
     is_archived: false, is_compulsory: true, lesson_duration_minutes: '',
-    applicable_year_levels: [], scheduling_preferences: {},
+    applicable_education_stages: [], applicable_year_levels: [], scheduling_preferences: {},
   });
+  const educationStages = [
+    ['EARLY_YEARS', 'Early Years'],
+    ['PRIMARY', 'Primary'],
+    ['JHS', 'JHS'],
+    ['OTHER', 'Other programmes'],
+  ];
   const [classes, setClasses] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [assignmentForm, setAssignmentForm] = useState({
-    class_id: '', subject_id: '', curriculum: 'COMMON', is_compulsory: true,
+    class_id: '', subject_id: '', curriculum: '', is_compulsory: true,
     lesson_duration_minutes: '',
   });
   const [preferences, setPreferences] = useState([]);
@@ -62,6 +68,7 @@ function Subjects() {
     if (!query) return true;
     return subject.name.toLowerCase().includes(query) || (subject.code || '').toLowerCase().includes(query);
   });
+  const awaitingConfiguration = subjects.filter((subject) => !(subject.curricula || []).length).length;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -71,11 +78,12 @@ function Subjects() {
       const payload = {
         ...formData,
         lesson_duration_minutes: formData.lesson_duration_minutes ? Number(formData.lesson_duration_minutes) : null,
+        applicable_education_stages: formData.applicable_education_stages,
         applicable_year_levels: formData.applicable_year_levels,
       };
       if (editingId) await updateSubject(editingId, payload);
       else await createSubject(payload);
-      setFormData({ name: '', code: '', curricula: ['COMMON'], is_active: true, is_archived: false, is_compulsory: true, lesson_duration_minutes: '', applicable_year_levels: [], scheduling_preferences: {} });
+      setFormData({ name: '', code: '', curricula: [], is_active: true, is_archived: false, is_compulsory: true, lesson_duration_minutes: '', applicable_education_stages: [], applicable_year_levels: [], scheduling_preferences: {} });
       setEditingId(null);
       await fetchSubjects();
     } catch (err) {
@@ -90,11 +98,12 @@ function Subjects() {
     setFormData({
       name: subject.name,
       code: subject.code || '',
-      curricula: subject.curricula || ['COMMON'],
+      curricula: subject.curricula || [],
       is_active: subject.is_active !== false,
       is_archived: subject.is_archived === true,
       is_compulsory: subject.is_compulsory !== false,
       lesson_duration_minutes: subject.lesson_duration_minutes || '',
+      applicable_education_stages: subject.applicable_education_stages || [],
       applicable_year_levels: subject.applicable_year_levels || [],
       scheduling_preferences: subject.scheduling_preferences || {},
     });
@@ -102,7 +111,7 @@ function Subjects() {
 
   const cancelEdit = () => {
     setEditingId(null);
-    setFormData({ name: '', code: '', curricula: ['COMMON'], is_active: true, is_archived: false, is_compulsory: true, lesson_duration_minutes: '', applicable_year_levels: [], scheduling_preferences: {} });
+    setFormData({ name: '', code: '', curricula: [], is_active: true, is_archived: false, is_compulsory: true, lesson_duration_minutes: '', applicable_education_stages: [], applicable_year_levels: [], scheduling_preferences: {} });
   };
 
   const handleDelete = async (id) => {
@@ -136,7 +145,7 @@ function Subjects() {
           : null,
       });
       await fetchSubjects();
-      setAssignmentForm({ class_id: '', subject_id: '', curriculum: 'COMMON', is_compulsory: true, lesson_duration_minutes: '' });
+      setAssignmentForm({ class_id: '', subject_id: '', curriculum: '', is_compulsory: true, lesson_duration_minutes: '' });
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to assign subject to class.');
     }
@@ -224,6 +233,24 @@ function Subjects() {
                 </label>
               ))}
             </div>
+            <label>Applicable education sections *</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+              {educationStages.map(([stage, label]) => (
+                <label key={stage} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.applicable_education_stages.includes(stage)}
+                    onChange={(event) => {
+                      const stages = event.target.checked
+                        ? [...formData.applicable_education_stages, stage]
+                        : formData.applicable_education_stages.filter((item) => item !== stage);
+                      setFormData({ ...formData, applicable_education_stages: stages });
+                    }}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div>
                 <label>Lesson duration (minutes)</label>
@@ -231,10 +258,13 @@ function Subjects() {
               </div>
               <div>
                 <label>Applicable year levels</label>
-                <input type="text" value={(formData.applicable_year_levels || []).join(',')} onChange={(event) => setFormData({
-                  ...formData,
-                  applicable_year_levels: event.target.value.split(',').map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value >= 1 && value <= 11),
-                })} placeholder="e.g. 4,5,6" />
+                <input type="text" value={(formData.applicable_year_levels || []).join(',')} onChange={(event) => {
+                  const values = event.target.value.trim() ? event.target.value.split(',').map((value) => value.trim()) : [];
+                  setFormData({
+                    ...formData,
+                    applicable_year_levels: values.map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 11),
+                  });
+                }} placeholder="e.g. 4,5,6" />
               </div>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -275,13 +305,14 @@ function Subjects() {
 
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Code</th><th>Name</th><th>Curricula</th><th>Levels</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Code</th><th>Name</th><th>Curricula</th><th>Sections</th><th>Levels</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                   {filteredSubjects.map(sub => (
                     <tr key={sub.id}>
                       <td><strong>{sub.code || '-'}</strong></td>
                       <td>{sub.name}</td>
                       <td>{(sub.curricula || []).map((curriculum) => curriculum === 'PEARSON' ? 'Pearson' : curriculum).join(', ') || '-'}</td>
+                      <td>{(sub.applicable_education_stages || []).map((stage) => educationStages.find(([value]) => value === stage)?.[1] || stage).join(', ') || 'Needs review'}</td>
                       <td>{(sub.applicable_year_levels || []).join(', ') || 'All configured levels'}</td>
                       <td>{sub.is_archived ? 'Archived' : sub.is_active === false ? 'Inactive' : 'Active'} · {sub.is_compulsory === false ? 'Optional' : 'Compulsory'}</td>
                       <td>
@@ -301,7 +332,15 @@ function Subjects() {
             <form className="data-panel form-panel" onSubmit={saveClassAssignment}>
               <div className="panel-heading"><div><p className="eyebrow">Explicit mapping</p><h2>Assign Subject to Class</h2></div></div>
               <label>Class *</label>
-              <select value={assignmentForm.class_id} onChange={(event) => setAssignmentForm({ ...assignmentForm, class_id: event.target.value })} required>
+              <select value={assignmentForm.class_id} onChange={(event) => {
+                const selectedClass = classes.find((item) => String(item.id) === event.target.value);
+                setAssignmentForm({
+                  ...assignmentForm,
+                  class_id: event.target.value,
+                  curriculum: selectedClass?.curriculum && selectedClass.curriculum !== 'UNASSIGNED'
+                    ? selectedClass.curriculum : '',
+                });
+              }} required>
                 <option value="">Select class</option>
                 {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
@@ -311,7 +350,8 @@ function Subjects() {
                 {subjects.filter((item) => item.is_active !== false && item.is_archived !== true).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
               <label>Curriculum *</label>
-              <select value={assignmentForm.curriculum} onChange={(event) => setAssignmentForm({ ...assignmentForm, curriculum: event.target.value })}>
+              <select value={assignmentForm.curriculum} onChange={(event) => setAssignmentForm({ ...assignmentForm, curriculum: event.target.value })} required>
+                <option value="">Select curriculum</option>
                 <option value="COMMON">Common Primary</option>
                 <option value="GES">GES / JHS</option>
                 <option value="PEARSON">Pearson</option>

@@ -212,7 +212,10 @@ const getStudentResults = async (req, res, next) => {
       values
     );
 
-    res.json(result.rows);
+    res.json(result.rows.map((row) => ({
+      ...row,
+      historical_context_missing: !row.class_name_snapshot || !row.academic_year_snapshot,
+    })));
   } catch (error) {
     next(error);
   }
@@ -279,10 +282,12 @@ const getReportCard = async (req, res, next) => {
       [studentId, school_id, term]
     );
     const reportSnapshot = snapshotRes.rows[0];
-    const reportClassId = reportSnapshot?.class_id ?? student.class_id;
+    const reportClassId = reportSnapshot ? reportSnapshot.class_id : student.class_id;
     if (reportSnapshot) {
-      student.class_name = reportSnapshot.class_name_snapshot || student.class_name;
-      student.class_year_level = reportSnapshot.year_level_snapshot ?? student.class_year_level;
+      student.historical_context_missing = !reportSnapshot.class_name_snapshot
+        || !reportSnapshot.academic_year_snapshot;
+      student.class_name = reportSnapshot.class_name_snapshot || 'Historical class not recorded';
+      student.class_year_level = reportSnapshot.year_level_snapshot;
       student.curriculum = reportSnapshot.curriculum;
       student.academic_year = reportSnapshot.academic_year_snapshot;
     }

@@ -50,6 +50,7 @@ const getParentSelections = async (req, res, next) => {
     const result = await pool.query(
       `SELECT s.id AS student_id, s.name, LPAD(s.id::TEXT, 6, '0') AS admission_number,
               s.class_id, s.curriculum, c.name AS class_name, c.year_level,
+              c.education_stage AS class_education_stage,
               sc.academic_year,
               p.opens_at, p.deadline, p.enabled AS period_enabled,
               current_selection.id AS selection_id,
@@ -59,7 +60,8 @@ const getParentSelections = async (req, res, next) => {
               current_selection.assigned_class_id,
               assigned_class.name AS assigned_class_name,
               assigned_class.year_level AS assigned_year_level,
-              assigned_class.curriculum AS assigned_curriculum
+              assigned_class.curriculum AS assigned_curriculum,
+              assigned_class.education_stage AS assigned_education_stage
        FROM student_parent sp
        JOIN parents parent ON parent.id = sp.parent_id AND parent.school_id = sp.school_id
        JOIN users pu ON pu.id = parent.user_id AND pu.school_id = parent.school_id
@@ -87,9 +89,14 @@ const getParentSelections = async (req, res, next) => {
     );
     const children = result.rows.map((row) => ({
       ...row,
-      class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum),
+      class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum, row.class_education_stage),
       assigned_class_name: row.assigned_class_name
-        ? canonicalClassName(row.assigned_class_name, row.assigned_year_level, row.assigned_curriculum)
+        ? canonicalClassName(
+          row.assigned_class_name,
+          row.assigned_year_level,
+          row.assigned_curriculum,
+          row.assigned_education_stage
+        )
         : null,
     }));
     await pool.query(
@@ -130,7 +137,8 @@ const submitSelection = async (req, res, next) => {
     transactionOpen = true;
     const childResult = await client.query(
       `SELECT s.id, s.name, s.class_id, s.curriculum, c.year_level,
-              c.curriculum AS class_curriculum, sc.academic_year,
+              c.curriculum AS class_curriculum, c.education_stage AS class_education_stage,
+              sc.academic_year,
               EXISTS (
                 SELECT 1 FROM curriculum_selection_periods period
                 WHERE period.school_id = s.school_id
@@ -222,7 +230,8 @@ const submitChangeRequest = async (req, res, next) => {
     await client.query('BEGIN');
     transactionOpen = true;
     const childResult = await client.query(
-      `SELECT s.id, s.name, s.class_id, s.curriculum, c.year_level, sc.academic_year
+      `      SELECT s.id, s.name, s.class_id, s.curriculum, c.year_level,
+             c.education_stage AS class_education_stage, sc.academic_year
        FROM students s
        JOIN student_parent sp ON sp.student_id = s.id AND sp.school_id = s.school_id
        JOIN parents p ON p.id = sp.parent_id AND p.school_id = sp.school_id
@@ -240,7 +249,7 @@ const submitChangeRequest = async (req, res, next) => {
     const child = childResult.rows[0];
     if (!['GES', 'PEARSON'].includes(child.curriculum)
         || child.curriculum === selectedCurriculum
-        || !isValidPathwayStage(child.year_level, selectedCurriculum)) {
+        || !isValidPathwayStage(child.year_level, selectedCurriculum, child.class_education_stage)) {
       await client.query('ROLLBACK');
       transactionOpen = false;
       return res.status(409).json({ message: 'A pathway change must be different from the current curriculum and available for the child’s current class level.' });
@@ -311,6 +320,7 @@ const getAdminSelections = async (req, res, next) => {
                 selection.rejection_reason, selection.assigned_class_id,
                 selection.assigned_at, student.class_id AS current_class_id,
                 student.curriculum AS current_curriculum, current_class.year_level AS current_year_level,
+                current_class.education_stage AS current_education_stage,
                 current_class.name AS current_class_name
          FROM curriculum_pathway_selections selection
          LEFT JOIN users parent ON parent.id = selection.parent_user_id
@@ -330,10 +340,11 @@ const getAdminSelections = async (req, res, next) => {
         [req.user.school_id, academicYear]
       ),
       pool.query(
-        `SELECT id, name, year_level, curriculum
+        `SELECT id, name, year_level, curriculum, education_stage
          FROM classes
-         WHERE school_id = $1 AND year_level BETWEEN 7 AND 11
+         WHERE school_id = $1 AND education_stage IN ('JHS', 'OTHER') AND year_level BETWEEN 7 AND 11
            AND curriculum IN ('GES', 'PEARSON')
+           AND (curriculum <> 'GES' OR education_stage = 'JHS')
          ORDER BY curriculum, year_level, name, id`,
         [req.user.school_id]
       ),
@@ -348,11 +359,12 @@ const getAdminSelections = async (req, res, next) => {
           selection.current_class_name,
           selection.current_year_level,
           selection.current_curriculum,
+          selection.current_education_stage,
         ),
       })),
       classes: classes.rows.map((classItem) => ({
         ...classItem,
-        name: canonicalClassName(classItem.name, classItem.year_level, classItem.curriculum),
+        name: canonicalClassName(classItem.name, classItem.year_level, classItem.curriculum, classItem.education_stage),
       })),
     });
   } catch (error) {
@@ -515,7 +527,9 @@ const assignSelectionClass = async (req, res, next) => {
               selection.request_type, selection.selected_curriculum,
               selection.previous_curriculum, selection.status,
               student.class_id AS current_class_id, student.curriculum AS current_curriculum,
-              current_class.year_level AS current_year_level, current_class.curriculum AS current_class_curriculum
+              current_class.year_level AS current_year_level,
+              current_class.curriculum AS current_class_curriculum,
+              current_class.education_stage AS current_education_stage
        FROM curriculum_pathway_selections selection
        JOIN students student ON student.id = selection.student_id
          AND student.school_id = selection.school_id
@@ -541,7 +555,8 @@ const assignSelectionClass = async (req, res, next) => {
     if (selection.request_type === 'initial_selection'
         && (Number(selection.current_year_level) !== 6
           || selection.current_curriculum !== 'COMMON'
-          || selection.current_class_curriculum !== 'COMMON')) {
+          || selection.current_class_curriculum !== 'COMMON'
+          || selection.current_education_stage !== 'PRIMARY')) {
       await client.query('ROLLBACK');
       transactionOpen = false;
       return res.status(409).json({ message: 'The student is no longer assigned to the Year 6 Common class for this initial transition.' });
@@ -559,7 +574,7 @@ const assignSelectionClass = async (req, res, next) => {
     }
 
     const targetResult = await client.query(
-      `SELECT id, name, year_level, curriculum
+      `SELECT id, name, year_level, curriculum, education_stage
        FROM classes
        WHERE id = $1 AND school_id = $2
        FOR UPDATE`,
@@ -601,7 +616,12 @@ const assignSelectionClass = async (req, res, next) => {
         year_level: targetYear,
       },
     });
-    const className = canonicalClassName(targetResult.rows[0].name, targetYear, selection.selected_curriculum);
+    const className = canonicalClassName(
+      targetResult.rows[0].name,
+      targetYear,
+      selection.selected_curriculum,
+      targetResult.rows[0].education_stage
+    );
     await notifyGuardians(client, {
       schoolId: req.user.school_id,
       studentId: selection.student_id,

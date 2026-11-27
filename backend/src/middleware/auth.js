@@ -23,7 +23,7 @@ const authenticate = (req, res, next) => {
 
   const pool = require('../config/db');
   pool.query(
-    'SELECT is_active, session_version FROM users WHERE id=$1 AND school_id=$2',
+    'SELECT is_active, session_version, role FROM users WHERE id=$1 AND school_id=$2',
     [payload.id, payload.school_id]
   ).then((result) => {
     const account = result.rows[0];
@@ -34,27 +34,35 @@ const authenticate = (req, res, next) => {
       && Number(payload.session_version) !== Number(account.session_version ?? 1)) {
       return res.status(401).json({ message: 'Session has expired. Please sign in again.' });
     }
-    req.user = { ...payload, role: normalizeRole(payload.role) };
+    if (payload.role !== account.role) {
+      return res.status(401).json({ message: 'Your account permissions changed. Please sign in again.' });
+    }
+    req.user = { ...payload, role: normalizeRole(account.role) };
     requestContext.run(req.user, next);
   }).catch(() => {
-    req.user = { ...payload, role: normalizeRole(payload.role) };
-    requestContext.run(req.user, next);
+    const error = new Error('Account verification is temporarily unavailable.');
+    error.status = 503;
+    next(error);
   });
 };
 
-const authorize = (allowedRoles = []) => (req, res, next) => {
-  if (!allowedRoles.length) {
-    return next();
-  }
-
-  const normalizedUserRole = normalizeRole(req.user?.role);
+const authorize = (allowedRoles = []) => {
   const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
+  const middleware = (req, res, next) => {
+    if (!allowedRoles.length) {
+      return next();
+    }
 
-  if (!req.user || !normalizedAllowedRoles.includes(normalizedUserRole)) {
-    return res.status(403).json({ message: 'Forbidden' });
-  }
+    const normalizedUserRole = normalizeRole(req.user?.role);
 
-  next();
+    if (!req.user || !normalizedAllowedRoles.includes(normalizedUserRole)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    next();
+  };
+  middleware.allowedRoles = Object.freeze(normalizedAllowedRoles);
+  return middleware;
 };
 
 module.exports = { authenticate, authorize, normalizeRole };

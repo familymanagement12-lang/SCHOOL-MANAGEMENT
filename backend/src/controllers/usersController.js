@@ -46,35 +46,35 @@ const createUser = async (req, res, next) => {
         'INSERT INTO users (school_id, name, email, password, role, subjects, is_active, verification_token) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role, subjects, is_active, created_at',
         [school_id, name, email, hashedPassword, role, subjects || [], is_active !== false, verificationToken]
       );
+
+      if (role === 'teacher' || role === 'admin') {
+        const existingEmployee = await client.query(
+          'SELECT id FROM employees WHERE school_id=$1 AND email=$2 LIMIT 1',
+          [school_id, email]
+        );
+        if (existingEmployee.rows.length) {
+          await client.query(
+            `UPDATE employees SET full_name=$1, role=$2, email=$3, is_active=$4,
+                    employment_status=CASE WHEN $4 THEN 'active' ELSE 'inactive' END
+             WHERE id=$5 AND school_id=$6`,
+            [name, role, email, is_active !== false, existingEmployee.rows[0].id, school_id]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO employees
+               (school_id, full_name, role, email, is_active, employment_status)
+             VALUES ($1,$2,$3,$4,$5,CASE WHEN $5 THEN 'active' ELSE 'inactive' END)`,
+            [school_id, name, role, email, is_active !== false]
+          );
+        }
+      }
+
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
-    }
-
-    // Automatically add teachers and admins to the HR/Payroll Employees table
-    if (role === 'teacher' || role === 'admin') {
-      const existingEmployee = await pool.query(
-        'SELECT id FROM employees WHERE school_id=$1 AND email=$2 LIMIT 1',
-        [school_id, email]
-      );
-      if (existingEmployee.rows.length) {
-        await pool.query(
-          `UPDATE employees SET full_name=$1, role=$2, email=$3, is_active=$4,
-                  employment_status=CASE WHEN $4 THEN 'active' ELSE 'inactive' END
-           WHERE id=$5 AND school_id=$6`,
-          [name, role, email, is_active !== false, existingEmployee.rows[0].id, school_id]
-        );
-      } else {
-        await pool.query(
-          `INSERT INTO employees
-             (school_id, full_name, role, email, is_active, employment_status)
-           VALUES ($1,$2,$3,$4,$5,CASE WHEN $5 THEN 'active' ELSE 'inactive' END)`,
-          [school_id, name, role, email, is_active !== false]
-        );
-      }
     }
 
     // 3. Send Verification Email via Resend

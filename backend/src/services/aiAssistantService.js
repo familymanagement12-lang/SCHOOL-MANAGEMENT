@@ -40,15 +40,6 @@ async function getScope(user) {
   const role = ['store', 'storekeeper'].includes(user.role) ? 'inventory' : user.role;
   if (role === 'admin') return { classIds: null, studentIds: null };
   if (role === 'teacher') {
-    await pool.query(`CREATE TABLE IF NOT EXISTS teacher_subject_assignments (
-      id SERIAL PRIMARY KEY,
-      school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-      teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-      class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (school_id, teacher_id, subject_id, class_id)
-    )`);
     const result = await pool.query(
       `SELECT c.id FROM classes c WHERE c.school_id = $1 AND
          (c.class_teacher_id = $2 OR EXISTS (

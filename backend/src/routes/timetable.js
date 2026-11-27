@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { createMissingDatabaseSchemaHandler } = require('../middleware/databaseSchemaError');
 const {
   getTimetable,
   getTimetableMeta,
@@ -54,5 +55,9 @@ router.post('/suggestions', authorize(['admin']), getSuggestions);
 router.put('/:id', authorize(['admin']), updateTimetableEntry);
 router.put('/:id/lock', authorize(['admin']), setEntryLock);
 router.delete('/:id', authorize(['admin']), deleteTimetableEntry);
+
+router.use(createMissingDatabaseSchemaHandler(
+  'Timetable database schema is unavailable. Apply the versioned timetable migrations before retrying.'
+));
 
 module.exports = router;

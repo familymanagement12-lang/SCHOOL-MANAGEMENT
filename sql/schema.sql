@@ -41,12 +41,6 @@ CREATE TABLE IF NOT EXISTS subjects (
   school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   code TEXT,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  is_archived BOOLEAN NOT NULL DEFAULT FALSE,
-  is_compulsory BOOLEAN NOT NULL DEFAULT TRUE,
-  lesson_duration_minutes INTEGER,
-  applicable_year_levels INTEGER[],
-  scheduling_preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE (school_id, name)
 );
@@ -135,17 +129,6 @@ CREATE TABLE IF NOT EXISTS announcements (
   class_id INTEGER REFERENCES classes(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   message TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS timetables (
-  id SERIAL PRIMARY KEY,
-  school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-  class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-  day_of_week TEXT NOT NULL CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
-  start_time TIME NOT NULL,
-  end_time TIME NOT NULL,
-  subject TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

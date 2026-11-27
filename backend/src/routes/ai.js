@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { isMissingDatabaseSchemaError } = require('../middleware/databaseSchemaError');
 const {
   ALLOWED_ROLES,
   classifyQuestion,
@@ -127,6 +128,11 @@ async function handleAssistantRequest(req, res, { forcedMode, generation }) {
       facts = await collectVerifiedFacts(req.user, intent, question);
     } catch (error) {
       console.error('[mccarthy-ai] verified query failed', { intent, code: error.code || 'unknown' });
+      if (isMissingDatabaseSchemaError(error)) {
+        return res.status(503).json({
+          message: 'A required school database table or column is unavailable. Contact the administrator to apply the approved migrations.',
+        });
+      }
       return res.status(500).json({ message: 'I couldn’t get that information just now. Please try again.' });
     }
   } else {

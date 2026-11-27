@@ -1,5 +1,3 @@
-BEGIN;
-
 UPDATE timetable_generation_runs r SET
   academic_year = COALESCE(NULLIF(r.academic_year, ''), tt.academic_year),
   term = COALESCE(NULLIF(r.term, ''), tt.term)
@@ -28,5 +26,3 @@ DO $$ BEGIN
       REFERENCES timetable_terms(school_id, academic_year, term, id) ON DELETE RESTRICT;
   END IF;
 END $$;
-
-COMMIT;

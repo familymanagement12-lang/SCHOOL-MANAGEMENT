@@ -10,6 +10,7 @@ const withCanonicalClassName = (student) => ({
     student.class_name,
     student.year_level,
     student.class_curriculum || student.curriculum,
+    student.education_stage,
   ),
 });
 
@@ -24,6 +25,7 @@ const studentSelect = `
     c.name AS class_name,
     s.curriculum,
     c.curriculum AS class_curriculum,
+    c.education_stage,
     c.year_level,
     u.is_active AS account_active,
     u.id AS account_user_id,
@@ -44,13 +46,13 @@ const normalizeClassId = (classId) => {
   return Number.isInteger(parsedClassId) && parsedClassId > 0 ? parsedClassId : NaN;
 };
 
-const ensureClassBelongsToSchool = async (classId, schoolId) => {
+const ensureClassBelongsToSchool = async (classId, schoolId, queryable = pool) => {
   if (!classId) {
     return null;
   }
 
-  const result = await pool.query(
-    'SELECT id, name, year_level, curriculum FROM classes WHERE id = $1 AND school_id = $2',
+  const result = await queryable.query(
+    'SELECT id, name, year_level, curriculum, education_stage FROM classes WHERE id = $1 AND school_id = $2',
     [classId, schoolId]
   );
   if (!result.rows.length) {
@@ -58,7 +60,7 @@ const ensureClassBelongsToSchool = async (classId, schoolId) => {
     error.status = 400;
     throw error;
   }
-  if (result.rows[0].year_level >= 7 && result.rows[0].year_level <= 9
+  if (result.rows[0].education_stage === 'JHS'
       && !['GES', 'PEARSON'].includes(result.rows[0].curriculum)) {
     const error = new Error('Assign GES or Pearson curriculum to this class before enrolling students.');
     error.status = 400;
@@ -74,7 +76,8 @@ const getStudents = async (req, res, next) => {
     if (role === 'accountant') {
       const result = await pool.query(
         `SELECT s.id, LPAD(s.id::text, 6, '0') AS student_id, s.name,
-                s.class_id, c.name AS class_name, s.curriculum, c.curriculum AS class_curriculum, c.year_level
+                s.class_id, c.name AS class_name, s.curriculum,
+                c.curriculum AS class_curriculum, c.education_stage, c.year_level
          FROM students s LEFT JOIN classes c ON c.id = s.class_id AND c.school_id = s.school_id
          WHERE s.school_id = $1 ORDER BY s.id`,
         [school_id]
@@ -148,7 +151,7 @@ const createStudent = async (req, res, next) => {
       const studentUserRes = await client.query(
         `INSERT INTO users
            (school_id, name, email, password, role, must_change_password, email_verified, is_active, username)
-         VALUES ($1,$2,$3,$4,'student',TRUE,FALSE,FALSE,$5)
+         VALUES ($1,$2,$3,$4,'student',TRUE,TRUE,TRUE,$5)
          RETURNING id`,
         [school_id, name, studentEmail, hashedStudentPassword, username]
       );
@@ -168,10 +171,11 @@ const createStudent = async (req, res, next) => {
       res.status(201).json({
         ...newStudent,
         name: newStudent.name,
-        class_name: canonicalClassName(assignedClass?.name, assignedClass?.year_level, assignedClass?.curriculum),
+        class_name: canonicalClassName(assignedClass?.name, assignedClass?.year_level, assignedClass?.curriculum, assignedClass?.education_stage),
         username,
         studentPassword: password.temporaryPassword,
-        account_requires_activation: true,
+        account_active: true,
+        account_requires_activation: false,
       });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -188,19 +192,45 @@ const createStudent = async (req, res, next) => {
 };
 
 const updateStudent = async (req, res, next) => {
-  const { school_id } = req.user;
+  const { school_id, id: actorId } = req.user;
   const { id } = req.params;
-  const { name, class_id, dob, allergies, disability } = req.body;
+  const { name, class_id, dob, allergies, disability, change_reason } = req.body;
 
+  let client;
+  let transactionOpen = false;
   try {
     const normalizedClassId = normalizeClassId(class_id);
     if (Number.isNaN(normalizedClassId)) {
       return res.status(400).json({ message: 'Please select a valid class.' });
     }
 
-    const assignedClass = await ensureClassBelongsToSchool(normalizedClassId, school_id);
-
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionOpen = true;
+    const currentStudent = await client.query(
+      'SELECT id, class_id FROM students WHERE id = $1 AND school_id = $2 FOR UPDATE',
+      [id, school_id]
+    );
+    if (!currentStudent.rowCount) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      return res.status(404).json({ message: 'Student not found.' });
+    }
+    const classChanged = currentStudent.rows[0].class_id !== normalizedClassId;
+    const reason = typeof change_reason === 'string' ? change_reason.trim() : '';
+    if (classChanged && reason.length < 5) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      return res.status(400).json({
+        message: 'Provide a reason of at least five characters when changing a student’s class.',
+      });
+    }
+    const assignedClass = await ensureClassBelongsToSchool(normalizedClassId, school_id, client);
+    if (classChanged) {
+      await client.query(`SELECT set_config('app.class_change_reason', $1, TRUE)`, [reason]);
+      await client.query(`SELECT set_config('app.user_id', $1, TRUE)`, [String(actorId)]);
+    }
+    const result = await client.query(
       `UPDATE students
        SET name = $1, class_id = $2, dob = $3, allergies = $4, disability = $5
        WHERE id = $6 AND school_id = $7
@@ -209,15 +239,23 @@ const updateStudent = async (req, res, next) => {
     );
 
     if (!result.rows.length) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
       return res.status(404).json({ message: 'Student not found.' });
     }
-
+    await client.query('COMMIT');
+    transactionOpen = false;
     res.json({
       ...result.rows[0],
-      class_name: canonicalClassName(assignedClass?.name, assignedClass?.year_level, assignedClass?.curriculum),
+      class_name: canonicalClassName(assignedClass?.name, assignedClass?.year_level, assignedClass?.curriculum, assignedClass?.education_stage),
     });
   } catch (error) {
     next(error);
+  } finally {
+    if (client) {
+      if (transactionOpen) await client.query('ROLLBACK');
+      client.release();
+    }
   }
 };
 
@@ -308,7 +346,7 @@ const resetStudentAccountPassword = async (req, res, next) => {
       const created = await client.query(
         `INSERT INTO users
            (school_id,name,email,password,role,must_change_password,email_verified,is_active,username)
-         VALUES ($1,$2,$3,$4,'student',TRUE,FALSE,FALSE,$5)
+         VALUES ($1,$2,$3,$4,'student',TRUE,TRUE,TRUE,$5)
          RETURNING id`,
         [school_id, student.name, studentEmail, hashedPassword, username]
       );
@@ -323,7 +361,7 @@ const resetStudentAccountPassword = async (req, res, next) => {
     } else {
       await client.query(
         `UPDATE users
-         SET password=$1, must_change_password=TRUE,
+         SET password=$1, must_change_password=TRUE, is_active=TRUE,
              username=$2, session_version=session_version+1
          WHERE id=$3 AND school_id=$4 AND role='student'`,
         [hashedPassword, username, userId, school_id]
@@ -341,6 +379,7 @@ const resetStudentAccountPassword = async (req, res, next) => {
       username,
       temporary_password: temporaryPassword,
       must_change_password: true,
+      account_active: true,
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -392,7 +431,7 @@ const bulkCreateStudents = async (req, res, next) => {
         const studentUserRes = await client.query(
           `INSERT INTO users
              (school_id,name,email,password,role,must_change_password,email_verified,is_active,username)
-           VALUES ($1,$2,$3,$4,'student',TRUE,FALSE,FALSE,$5)
+           VALUES ($1,$2,$3,$4,'student',TRUE,TRUE,TRUE,$5)
            RETURNING id`,
           [school_id, name, studentEmail, hashedStudentPassword, username]
         );
@@ -403,6 +442,7 @@ const bulkCreateStudents = async (req, res, next) => {
           name: newStudent.name,
           username,
           temporary_password: password.temporaryPassword,
+          account_active: true,
         });
       }
 
@@ -415,6 +455,7 @@ const bulkCreateStudents = async (req, res, next) => {
           name: student.name,
           username: student.username,
           temporary_password: student.temporary_password,
+          account_active: student.account_active,
         })),
       });
     } catch (error) {

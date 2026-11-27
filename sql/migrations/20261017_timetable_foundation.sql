@@ -1,5 +1,3 @@
-BEGIN;
-
 ALTER TABLE schools
   ADD COLUMN IF NOT EXISTS subject_teaching_starts_from TEXT DEFAULT 'Class 4';
 
@@ -127,5 +125,3 @@ CREATE INDEX IF NOT EXISTS idx_timetables_school_day_time ON timetables (school_
 CREATE INDEX IF NOT EXISTS idx_timetables_teacher_time ON timetables (school_id, teacher_id, day_of_week, start_time, end_time);
 CREATE INDEX IF NOT EXISTS idx_timetables_class_time ON timetables (school_id, class_id, day_of_week, start_time, end_time);
 CREATE INDEX IF NOT EXISTS idx_timetables_room_time ON timetables (school_id, room_id, day_of_week, start_time, end_time);
-
-COMMIT;

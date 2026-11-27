@@ -27,7 +27,7 @@ const login = async (req, res, next) => {
   const loginIdentifier = identifier || email;
 
   if (!loginIdentifier || !password) {
-    return res.status(400).json({ message: 'Email and password are required.' });
+    return res.status(400).json({ message: 'Enter your username, email, or registered phone and password.' });
   }
 
   try {
@@ -36,14 +36,8 @@ const login = async (req, res, next) => {
              u.username, u.must_change_password, u.email_verified, u.is_active,
              u.session_version
       FROM users u
-      WHERE lower(u.email) = lower($1)
+      WHERE (u.role <> 'student' AND lower(u.email) = lower($1))
          OR (u.username IS NOT NULL AND lower(u.username) = lower($1))
-         OR (u.role = 'student' AND EXISTS (
-           SELECT 1 FROM students s
-           WHERE s.user_id = u.id AND s.school_id = u.school_id
-             AND LPAD(s.id::text, 6, '0') = LPAD($1, 6, '0')
-             AND $1 ~ '^[0-9]{1,6}$'
-         ))
          OR (u.role = 'parent' AND EXISTS (
            SELECT 1 FROM parents p
            WHERE p.user_id = u.id AND p.school_id = u.school_id

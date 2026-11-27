@@ -4,27 +4,6 @@ import { getStudents } from '../api/students';
 import { getUsers } from '../api/users';
 import { classStageLabel, curriculumLabel } from '../curriculumDisplay';
 
-const STAGE_OPTIONS = [
-  ...Array.from({ length: 6 }, (_value, index) => ({
-    value: `COMMON:${index + 1}`,
-    year_level: index + 1,
-    curriculum: 'COMMON',
-    label: `Common - Year ${index + 1}`,
-  })),
-  ...Array.from({ length: 3 }, (_value, index) => ({
-    value: `GES:${index + 7}`,
-    year_level: index + 7,
-    curriculum: 'GES',
-    label: `GES - JHS ${index + 1}`,
-  })),
-  ...Array.from({ length: 5 }, (_value, index) => ({
-    value: `PEARSON:${index + 7}`,
-    year_level: index + 7,
-    curriculum: 'PEARSON',
-    label: `Pearson - Year ${index + 7}`,
-  })),
-];
-
 const getCurrentUser = () => {
   try {
     const userStr = localStorage.getItem('user');
@@ -39,8 +18,9 @@ function Classes() {
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const emptyForm = {
-    name: '', description: '', class_teacher_id: '', teaching_model: 'class_teacher',
-    year_level: '', curriculum: 'UNASSIGNED',
+    name: '', description: '', class_teacher_id: '', teaching_model: '',
+    education_stage: 'UNASSIGNED', programme: '', year_level: '', curriculum: 'UNASSIGNED',
+    change_reason: '',
   };
   const [formData, setFormData] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
@@ -76,6 +56,21 @@ function Classes() {
     const teacher = teachers.find(t => t.id === classItem.teacher_id);
     return { ...classItem, studentCount: count, teacherName: teacher?.name };
   }), [classes, students, teachers]);
+  const stageCounts = useMemo(() => ({
+    EARLY_YEARS: classes.filter((item) => item.education_stage === 'EARLY_YEARS').length,
+    PRIMARY: classes.filter((item) => item.education_stage === 'PRIMARY').length,
+    JHS: classes.filter((item) => item.education_stage === 'JHS').length,
+    OTHER: classes.filter((item) => item.education_stage === 'OTHER').length,
+  }), [classes]);
+  const pendingClassification = classRows.filter((item) => item.education_stage === 'UNASSIGNED');
+  const pendingCurriculum = classRows.filter((item) => !item.curriculum || item.curriculum === 'UNASSIGNED');
+  const classesNeedingAttention = classRows.filter((item) => (
+    item.education_stage === 'UNASSIGNED'
+    || !item.curriculum
+    || item.curriculum === 'UNASSIGNED'
+    || (item.education_stage !== 'UNASSIGNED' && !item.teaching_model)
+    || (item.education_stage === 'PRIMARY' && !item.class_teacher_id)
+  ));
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -100,9 +95,12 @@ function Classes() {
       name: classItem.name,
       description: classItem.description || '',
       class_teacher_id: String(classItem.class_teacher_id || classItem.teacher_id || ''),
-      teaching_model: classItem.teaching_model || 'class_teacher',
+      teaching_model: classItem.teaching_model || '',
+      education_stage: classItem.education_stage || 'UNASSIGNED',
+      programme: classItem.programme || '',
       year_level: classItem.year_level ? String(classItem.year_level) : '',
       curriculum: classItem.curriculum || 'UNASSIGNED',
+      change_reason: '',
     });
   };
 
@@ -112,29 +110,27 @@ function Classes() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this class? Students inside will become Unassigned.')) {
-      return;
-    }
+    const changeReason = window.prompt('Why is this class being deleted? (At least 5 characters)');
+    if (changeReason === null || changeReason.trim().length < 5) return;
+    if (!window.confirm('Are you sure you want to delete this class? Students inside will become Unassigned.')) return;
 
     try {
-      await deleteClass(id);
+      await deleteClass(id, changeReason.trim());
       await fetchPageData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to delete class');
     }
   };
 
-  const selectedStage = formData.year_level && formData.curriculum !== 'UNASSIGNED'
-    ? `${formData.curriculum}:${formData.year_level}`
-    : 'UNASSIGNED';
-  const setStage = (value) => {
-    if (value === 'UNASSIGNED') {
-      setFormData({ ...formData, year_level: '', curriculum: 'UNASSIGNED' });
-      return;
-    }
-    const stage = STAGE_OPTIONS.find((option) => option.value === value);
-    if (stage) setFormData({ ...formData, year_level: String(stage.year_level), curriculum: stage.curriculum });
-  };
+  const stageLabel = (stage) => ({
+    EARLY_YEARS: 'Early Years',
+    PRIMARY: 'Primary',
+    JHS: 'JHS',
+    OTHER: 'Other programme',
+    UNASSIGNED: 'Pending classification',
+  }[stage] || 'Pending classification');
+  const allowedCurricula = ['COMMON', 'GES', 'PEARSON', 'UNASSIGNED'];
+  const primaryClass = formData.education_stage === 'PRIMARY';
 
   if (loading) return <div className="page"><p>Loading...</p></div>;
 
@@ -152,6 +148,65 @@ function Classes() {
             <strong>active classes</strong>
           </div>
         </section>
+
+        <section className="stats-grid" aria-label="Class configuration summary">
+          <article className="stat-card overview-stat stat-sky">
+            <div className="stat-topline"><span>Total Classes</span></div>
+            <strong>{classes.length}</strong><p>Existing school classes</p>
+          </article>
+          {[
+            ['Early Years', stageCounts.EARLY_YEARS],
+            ['Primary', stageCounts.PRIMARY],
+            ['JHS', stageCounts.JHS],
+            ['Other programmes', stageCounts.OTHER],
+          ].map(([label, count]) => (
+            <article className="stat-card overview-stat stat-emerald" key={label}>
+              <div className="stat-topline"><span>{label}</span></div>
+              <strong>{count}</strong><p>Explicitly classified</p>
+            </article>
+          ))}
+          <article className="stat-card overview-stat stat-amber">
+            <div className="stat-topline"><span>Awaiting classification</span></div>
+            <strong>{pendingClassification.length}</strong><p>Must be confirmed individually</p>
+          </article>
+          <article className="stat-card overview-stat stat-violet">
+            <div className="stat-topline"><span>Awaiting curriculum</span></div>
+            <strong>{pendingCurriculum.length}</strong><p>No subject allocation or timetable yet</p>
+          </article>
+        </section>
+
+        {user?.role === 'admin' && (
+          <section className="data-panel">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Configuration review</p><h2>Classes needing attention</h2></div>
+              <span>{classesNeedingAttention.length} class(es)</span>
+            </div>
+            {classesNeedingAttention.length ? (
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Class</th><th>Outstanding setup</th><th>Action</th></tr></thead>
+                  <tbody>
+                    {classesNeedingAttention.map((item) => {
+                      const missing = [];
+                      if (item.education_stage === 'UNASSIGNED') missing.push('education section');
+                      if (!item.curriculum || item.curriculum === 'UNASSIGNED') missing.push('curriculum');
+                      if (!item.teaching_model) missing.push('teaching model');
+                      if (item.education_stage === 'PRIMARY' && !item.class_teacher_id) missing.push('class teacher');
+                      return (
+                        <tr key={item.id}>
+                          <td>{item.name}</td>
+                          <td>{missing.join(', ')}</td>
+                          <td><button className="btn-small btn-edit" onClick={() => startEdit(item)}>Review class</button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p className="empty-state">All classes have an explicit section, curriculum, and required teaching setup.</p>}
+            <p>Each class is reviewed separately. No bulk defaults are applied to unresolved classes.</p>
+          </section>
+        )}
 
         <section className="split-layout">
           {user?.role === 'admin' && (
@@ -171,42 +226,90 @@ function Classes() {
                 type="text"
                 value={formData.name}
                 onChange={(event) => setFormData({ ...formData, name: event.target.value })}
-                placeholder="Example: JHS 1 - A or Year 7 - A"
+                placeholder="Enter the school's existing class name"
                 required
               />
 
-              <label>Curriculum stage</label>
-              <select value={selectedStage} onChange={(event) => setStage(event.target.value)}>
-                <option value="UNASSIGNED">Unassigned / custom class</option>
-                <optgroup label="Common curriculum - Years 1 to 6">
-                  {STAGE_OPTIONS.filter((stage) => stage.curriculum === 'COMMON').map((stage) => (
-                    <option key={stage.value} value={stage.value}>{stage.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="GES - JHS 1 to JHS 3">
-                  {STAGE_OPTIONS.filter((stage) => stage.curriculum === 'GES').map((stage) => (
-                    <option key={stage.value} value={stage.value}>{stage.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Pearson - Year 7 to Year 11">
-                  {STAGE_OPTIONS.filter((stage) => stage.curriculum === 'PEARSON').map((stage) => (
-                    <option key={stage.value} value={stage.value}>{stage.label}</option>
-                  ))}
-                </optgroup>
+              <label>Education section *</label>
+              <select
+                value={formData.education_stage}
+                onChange={(event) => setFormData({ ...formData, education_stage: event.target.value })}
+              >
+                <option value="UNASSIGNED">Pending administrator classification</option>
+                <option value="EARLY_YEARS">Early Years</option>
+                <option value="PRIMARY">Primary</option>
+                <option value="JHS">JHS</option>
+                <option value="OTHER">Other school programme</option>
               </select>
-              <p>GES class names are saved as JHS 1-3; Pearson class names remain Year 7-11.</p>
+              <p>Do not classify by name or number alone. Leave uncertain classes pending until confirmed.</p>
 
-              <label>Class Teacher (optional)</label>
+              {formData.education_stage === 'OTHER' && <>
+                <label>Programme name *</label>
+                <input
+                  type="text"
+                  value={formData.programme}
+                  onChange={(event) => setFormData({ ...formData, programme: event.target.value })}
+                  placeholder="Name the school programme"
+                  required
+                />
+              </>}
+
+              <label>Numeric level (when applicable)</label>
+              <input
+                type="number"
+                min="1"
+                max="11"
+                value={formData.year_level}
+                onChange={(event) => setFormData({ ...formData, year_level: event.target.value })}
+                disabled={formData.education_stage === 'UNASSIGNED'}
+                required={['PRIMARY', 'JHS'].includes(formData.education_stage)}
+              />
+
+              <label>Curriculum / pathway</label>
+              <select
+                value={formData.curriculum}
+                onChange={(event) => setFormData({ ...formData, curriculum: event.target.value })}
+              >
+                {allowedCurricula.map((curriculum) => (
+                  <option key={curriculum} value={curriculum}>
+                    {curriculum === 'UNASSIGNED' ? 'Unassigned' : curriculumLabel(curriculum)}
+                  </option>
+                ))}
+              </select>
+
+              <label>Teaching model{formData.education_stage !== 'UNASSIGNED' ? ' *' : ''}</label>
+              <select
+                value={formData.teaching_model}
+                onChange={(event) => setFormData({ ...formData, teaching_model: event.target.value })}
+                required={formData.education_stage !== 'UNASSIGNED'}
+              >
+                <option value="">Select a teaching model</option>
+                <option value="class_teacher">Class-teacher based</option>
+                <option value="subject_teacher">Subject-teacher based</option>
+              </select>
+
+              <label>Class Teacher{primaryClass ? ' *' : ' (optional)'}</label>
               <select
                 value={formData.class_teacher_id}
                 onChange={(event) => setFormData({ ...formData, class_teacher_id: event.target.value })}
+                required={primaryClass}
               >
                 <option value="">Not assigned yet</option>
                 {teachers.map(teacher => (
                   <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
                 ))}
               </select>
-              <p>You can assign a teacher later by editing this class.</p>
+              <p>Every Primary class retains a class teacher, including classes that also use subject teachers.</p>
+              <label>{editingId ? 'Reason for configuration change' : 'Reason for creating this class'} *</label>
+              <textarea
+                value={formData.change_reason}
+                onChange={(event) => setFormData({ ...formData, change_reason: event.target.value })}
+                placeholder={editingId
+                  ? 'Required when changing class configuration, name, or description'
+                  : 'Required to record why this class is being added'}
+                rows="2"
+                required
+              />
 
               <label>Description</label>
               <textarea
@@ -231,7 +334,15 @@ function Classes() {
                   <h3>{classItem.name}</h3>
                   <p>{classItem.description || 'No description added yet.'}</p>
                   <p className="teacher-badge">Class teacher: {classItem.teacherName || 'Not assigned'}</p>
-                  {classItem.curriculum && classItem.curriculum !== 'UNASSIGNED' && <p className="teacher-badge">Curriculum: {curriculumLabel(classItem.curriculum)}{classItem.year_level ? ` - ${classStageLabel(classItem.year_level, classItem.curriculum)}` : ''}</p>}
+                  <p className="teacher-badge">
+                    Section: {stageLabel(classItem.education_stage)}
+                    {classItem.year_level ? ` · ${classStageLabel(classItem.year_level, classItem.curriculum, classItem.education_stage) || `Level ${classItem.year_level}`}` : ''}
+                    {classItem.programme ? ` · ${classItem.programme}` : ''}
+                  </p>
+                  <p className="teacher-badge">
+                    Curriculum: {classItem.curriculum && classItem.curriculum !== 'UNASSIGNED' ? curriculumLabel(classItem.curriculum) : 'Unassigned'}
+                    {' · Teaching model: '}{classItem.teaching_model || 'Unassigned'}
+                  </p>
                 </div>
                 <div className="class-count">
                   <strong>{classItem.studentCount}</strong>

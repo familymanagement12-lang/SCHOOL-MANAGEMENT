@@ -13,143 +13,6 @@ const DEFAULT_PERIODS = [
   { name: 'Period 5', start_time: '11:10', end_time: '11:50', is_break: false },
 ];
 
-const schemaSql = `
-  ALTER TABLE schools ADD COLUMN IF NOT EXISTS subject_teaching_starts_from TEXT DEFAULT 'Class 4';
-
-  CREATE TABLE IF NOT EXISTS timetable_rooms (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    capacity INTEGER,
-    location TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE (school_id, name)
-  );
-
-  CREATE TABLE IF NOT EXISTS timetable_periods (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    day_of_week TEXT CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    is_break BOOLEAN DEFAULT FALSE,
-    sort_order INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CHECK (start_time < end_time)
-  );
-
-  CREATE TABLE IF NOT EXISTS teacher_subject_assignments (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-    class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE (school_id, teacher_id, subject_id, class_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS teacher_availability (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    day_of_week TEXT NOT NULL CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    is_available BOOLEAN DEFAULT FALSE,
-    reason TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CHECK (start_time < end_time)
-  );
-
-  CREATE TABLE IF NOT EXISTS class_availability (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-    day_of_week TEXT NOT NULL CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    is_available BOOLEAN DEFAULT FALSE,
-    reason TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CHECK (start_time < end_time)
-  );
-
-  CREATE TABLE IF NOT EXISTS room_availability (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    room_id INTEGER NOT NULL REFERENCES timetable_rooms(id) ON DELETE CASCADE,
-    day_of_week TEXT NOT NULL CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')),
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    is_available BOOLEAN DEFAULT FALSE,
-    reason TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CHECK (start_time < end_time)
-  );
-
-  CREATE TABLE IF NOT EXISTS subject_weekly_requirements (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-    lessons_per_week INTEGER NOT NULL CHECK (lessons_per_week >= 0),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE (school_id, class_id, subject_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS timetable_generation_runs (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    academic_year TEXT,
-    term TEXT,
-    status TEXT DEFAULT 'completed',
-    summary JSONB DEFAULT '{}'::jsonb,
-    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-  );
-
-  CREATE TABLE IF NOT EXISTS timetable_unscheduled_lessons (
-    id SERIAL PRIMARY KEY,
-    school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-    generation_run_id INTEGER REFERENCES timetable_generation_runs(id) ON DELETE CASCADE,
-    class_id INTEGER REFERENCES classes(id) ON DELETE CASCADE,
-    subject_id INTEGER REFERENCES subjects(id) ON DELETE CASCADE,
-    teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    required_lessons INTEGER NOT NULL DEFAULT 0,
-    scheduled_lessons INTEGER NOT NULL DEFAULT 0,
-    missing_lessons INTEGER NOT NULL DEFAULT 0,
-    reason TEXT,
-    suggestions JSONB DEFAULT '[]'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-  );
-
-  ALTER TABLE timetables ADD COLUMN IF NOT EXISTS subject_id INTEGER REFERENCES subjects(id) ON DELETE SET NULL;
-  ALTER TABLE timetables ADD COLUMN IF NOT EXISTS teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
-  ALTER TABLE timetables ADD COLUMN IF NOT EXISTS room_id INTEGER REFERENCES timetable_rooms(id) ON DELETE SET NULL;
-  ALTER TABLE timetables ADD COLUMN IF NOT EXISTS period_id INTEGER REFERENCES timetable_periods(id) ON DELETE SET NULL;
-  ALTER TABLE timetables ADD COLUMN IF NOT EXISTS academic_year TEXT;
-  ALTER TABLE timetables ADD COLUMN IF NOT EXISTS term TEXT;
-  ALTER TABLE timetables ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'DRAFT';
-  ALTER TABLE timetables ADD COLUMN IF NOT EXISTS generation_run_id INTEGER REFERENCES timetable_generation_runs(id) ON DELETE SET NULL;
-
-  CREATE INDEX IF NOT EXISTS idx_timetables_school_day_time ON timetables (school_id, day_of_week, start_time, end_time);
-  CREATE INDEX IF NOT EXISTS idx_timetables_teacher_time ON timetables (school_id, teacher_id, day_of_week, start_time, end_time);
-  CREATE INDEX IF NOT EXISTS idx_timetables_class_time ON timetables (school_id, class_id, day_of_week, start_time, end_time);
-  CREATE INDEX IF NOT EXISTS idx_timetables_room_time ON timetables (school_id, room_id, day_of_week, start_time, end_time);
-`;
-
-let schemaReady = false;
-
-const ensureSchema = async () => {
-  if (!schemaReady) {
-    await pool.query(schemaSql);
-    schemaReady = true;
-  }
-};
-
 const getCurrentVersion = async (schoolId, versionId = null) => {
   if (versionId) {
     const selected = await pool.query(
@@ -210,7 +73,6 @@ const bumpDraftVersion = async (client, schoolId, versionId, actorId, action, en
 const getVersions = async (req, res, next) => {
   const { school_id } = req.user;
   try {
-    await ensureSchema();
     const result = await pool.query(
       `SELECT * FROM timetable_versions WHERE school_id = $1
        AND ($2::TEXT = 'admin' OR status = 'PUBLISHED')
@@ -232,7 +94,6 @@ const createVersion = async (req, res, next) => {
   const term = String(req.body.term || '').trim();
   if (!academicYear || !term || !['Term 1', 'Term 2', 'Term 3'].includes(term)) return res.status(400).json({ message: 'Select an academic year and one of the configured terms.' });
   try {
-    await ensureSchema();
     const duplicate = await pool.query(
       `SELECT id FROM timetable_versions WHERE school_id = $1 AND academic_year = $2 AND term = $3 AND status = 'DRAFT'`,
       [school_id, academicYear, term]
@@ -270,7 +131,6 @@ const copyPreviousTerm = async (req, res, next) => {
   const client = await pool.connect();
   let transactionOpen = false;
   try {
-    await ensureSchema();
     await client.query('BEGIN'); transactionOpen = true;
     const locked = await lockDraftVersion(client, school_id, targetId, req.body.expected_revision);
     if (locked.error) {
@@ -624,7 +484,7 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
     );
     const context = await pool.query(
       `SELECT u.name AS teacher_name, s.name AS subject_name, c.name AS class_name,
-              c.year_level, c.teaching_model,
+              c.year_level, c.teaching_model, c.education_stage, c.curriculum,
               (SELECT ca.teacher_id FROM timetable_class_teacher_assignments ca
                WHERE ca.school_id = c.school_id AND ca.term_id = $5 AND ca.class_id = c.id) AS term_class_teacher_id,
               c.class_teacher_id
@@ -636,8 +496,15 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
       [entry.teacher_id, entry.subject_id, entry.class_id, schoolId, entry.term_id]
     );
     const row = context.rows[0] || {};
-      const classTeacherMayTeach = row.teaching_model === 'class_teacher'
-        && String(row.term_class_teacher_id || row.class_teacher_id) === String(entry.teacher_id);
+    if (row.education_stage === 'UNASSIGNED' || row.curriculum === 'UNASSIGNED') {
+      conflicts.push(createConflict(
+        'CLASSIFICATION_PENDING',
+        `Confirm the education section and curriculum for ${row.class_name || 'this class'} before scheduling subjects.`,
+        { class_id: entry.class_id, education_stage: row.education_stage, curriculum: row.curriculum }
+      ));
+    }
+    const classTeacherMayTeach = row.teaching_model === 'class_teacher'
+      && String(row.term_class_teacher_id || row.class_teacher_id) === String(entry.teacher_id);
     if (!context.rows.length || (!assignment.rows.length && !classTeacherMayTeach)) {
       conflicts.push(createConflict(
         'SUBJECT_ASSIGNMENT_CONFLICT',
@@ -651,7 +518,15 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
        FROM classes c
        JOIN curriculum_subjects cs ON cs.school_id=c.school_id
          AND cs.curriculum=c.curriculum AND cs.subject_id=$2
-       WHERE c.id=$1 AND c.school_id=$3`,
+       JOIN subjects s ON s.id=cs.subject_id AND s.school_id=cs.school_id
+       WHERE c.id=$1 AND c.school_id=$3
+         AND c.education_stage <> 'UNASSIGNED'
+         AND c.curriculum <> 'UNASSIGNED'
+         AND s.applicable_education_stages IS NOT NULL
+         AND c.education_stage = ANY(s.applicable_education_stages)
+         AND (s.applicable_year_levels IS NULL OR (
+           c.year_level IS NOT NULL AND c.year_level = ANY(s.applicable_year_levels)
+         ))`,
       [entry.class_id, entry.subject_id, schoolId]
     );
     if (!curriculum.rows.length) {
@@ -665,7 +540,14 @@ const getConflictsForSlot = async (schoolId, entry, options = {}) => {
       `SELECT 1 FROM subject_class_assignments a
        JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id AND s.is_active=TRUE AND s.is_archived=FALSE
        JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id AND c.curriculum=a.curriculum
-       WHERE a.school_id=$1 AND a.class_id=$2 AND a.subject_id=$3`,
+       WHERE a.school_id=$1 AND a.class_id=$2 AND a.subject_id=$3
+         AND c.education_stage <> 'UNASSIGNED'
+         AND c.curriculum <> 'UNASSIGNED'
+         AND s.applicable_education_stages IS NOT NULL
+         AND c.education_stage = ANY(s.applicable_education_stages)
+         AND (s.applicable_year_levels IS NULL OR (
+           c.year_level IS NOT NULL AND c.year_level = ANY(s.applicable_year_levels)
+         ))`,
       [schoolId, entry.class_id, entry.subject_id]
     );
     if (!classSubject.rows.length) {
@@ -841,6 +723,7 @@ const hydrateTimetableRows = async (schoolId, filters = {}) => {
   const result = await pool.query(
         `SELECT t.*, COALESCE(t.class_name_snapshot, c.name) AS class_name,
           c.class_teacher_id, c.year_level, c.curriculum, c.teaching_model,
+          c.education_stage, c.programme,
           ct.name AS class_teacher_name, COALESCE(t.subject_name_snapshot, s.name, t.subject) AS subject_name, COALESCE(t.teacher_name_snapshot, u.name) AS teacher_name,
             COALESCE(t.room_name_snapshot, r.name) AS room_name, p.name AS period_name, p.is_break
        FROM timetables t
@@ -857,7 +740,7 @@ const hydrateTimetableRows = async (schoolId, filters = {}) => {
   );
   return result.rows.map((row) => ({
     ...row,
-    class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum),
+    class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum, row.education_stage),
     subject: row.subject_name || row.subject,
   }));
 };
@@ -868,7 +751,6 @@ const getTimetable = async (req, res, next) => {
   const versionId = req.query.version_id || req.query.versionId;
 
   try {
-    await ensureSchema();
     const school = await pool.query('SELECT academic_year, current_term FROM schools WHERE id = $1', [school_id]);
     const academicYear = req.query.academic_year || school.rows[0]?.academic_year;
     const term = req.query.term || school.rows[0]?.current_term;
@@ -908,7 +790,8 @@ const getTimetable = async (req, res, next) => {
       if (!rows.rows.length) return res.json([]);
       const result = await pool.query(
         `SELECT t.*, COALESCE(t.class_name_snapshot, c.name) AS class_name,
-                c.year_level, c.curriculum, COALESCE(t.subject_name_snapshot, s.name, t.subject) AS subject_name,
+                c.year_level, c.curriculum, c.education_stage, c.programme,
+                COALESCE(t.subject_name_snapshot, s.name, t.subject) AS subject_name,
                 COALESCE(t.teacher_name_snapshot, u.name) AS teacher_name, COALESCE(t.room_name_snapshot, r.name) AS room_name, p.name AS period_name
          FROM timetables t
      LEFT JOIN classes c ON t.school_id = c.school_id AND t.class_id = c.id
@@ -922,7 +805,7 @@ const getTimetable = async (req, res, next) => {
       );
       return res.json(result.rows.map((row) => ({
         ...row,
-        class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum),
+        class_name: canonicalClassName(row.class_name, row.year_level, row.curriculum, row.education_stage),
         subject: row.subject_name || row.subject,
       })));
     } else if (role === 'teacher') {
@@ -948,9 +831,10 @@ const getTimetable = async (req, res, next) => {
 const getTimetableMeta = async (req, res, next) => {
   const { school_id } = req.user;
   try {
-    await ensureSchema();
     const [classes, teachers, subjects, rooms, settings, versions, classSubjects] = await Promise.all([
-      pool.query(`SELECT c.id, c.name, c.description, c.teacher_id, c.class_teacher_id, c.year_level, c.teaching_model, u.name AS class_teacher_name
+      pool.query(`SELECT c.id, c.name, c.description, c.teacher_id, c.class_teacher_id,
+                    c.year_level, c.teaching_model, c.curriculum, c.education_stage, c.programme,
+                    u.name AS class_teacher_name
         FROM classes c LEFT JOIN users u ON u.id = c.class_teacher_id WHERE c.school_id = $1 ORDER BY c.year_level NULLS LAST, c.name`, [school_id]),
       pool.query("SELECT id, name, email, subjects FROM users WHERE school_id = $1 AND role = 'teacher' AND is_active = TRUE ORDER BY name", [school_id]),
       pool.query('SELECT * FROM subjects WHERE school_id = $1 AND is_active = TRUE AND is_archived = FALSE ORDER BY name', [school_id]),
@@ -958,6 +842,7 @@ const getTimetableMeta = async (req, res, next) => {
       pool.query('SELECT academic_year, current_term FROM schools WHERE id = $1', [school_id]),
       pool.query('SELECT * FROM timetable_versions WHERE school_id = $1 ORDER BY academic_year DESC, term, revision DESC', [school_id]),
       pool.query(`SELECT a.class_id, a.subject_id, a.curriculum, c.name AS class_name,
+                    c.education_stage, c.programme, c.year_level,
                     s.name AS subject_name, s.code AS subject_code
                   FROM subject_class_assignments a
                   JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id AND c.curriculum=a.curriculum
@@ -1048,7 +933,6 @@ const createTimetableEntry = async (req, res, next) => {
   const client = await pool.connect();
   let transactionOpen = false;
   try {
-    await ensureSchema();
     await client.query('BEGIN');
     transactionOpen = true;
     const locked = await lockDraftVersion(client, school_id, payload.version_id, payload.expected_revision);
@@ -1123,7 +1007,6 @@ const updateTimetableEntry = async (req, res, next) => {
   const client = await pool.connect();
   let transactionOpen = false;
   try {
-    await ensureSchema();
     await client.query('BEGIN');
     transactionOpen = true;
     const existing = await getEntryContext(school_id, id);
@@ -1203,7 +1086,6 @@ const deleteTimetableEntry = async (req, res, next) => {
   const client = await pool.connect();
   let transactionOpen = false;
   try {
-    await ensureSchema();
     await client.query('BEGIN');
     transactionOpen = true;
     const existing = await getEntryContext(school_id, id);
@@ -1239,7 +1121,6 @@ const setEntryLock = async (req, res, next) => {
   const client = await pool.connect();
   let transactionOpen = false;
   try {
-    await ensureSchema();
     await client.query('BEGIN');
     transactionOpen = true;
     const existing = await getEntryContext(school_id, req.params.id);
@@ -1269,7 +1150,6 @@ const upsertAssignment = async (req, res, next) => {
   const { teacher_id, subject_id, class_id, version_id } = req.body;
   if (!teacher_id || !subject_id || !class_id || !version_id) return res.status(400).json({ message: 'Select a draft term, teacher, subject, and class.' });
   try {
-    await ensureSchema();
     const version = await getDraftTerm(school_id, version_id);
     if (!version) return res.status(409).json({ message: 'Term configuration can only be changed for the selected draft.' });
     const valid = await pool.query(
@@ -1281,10 +1161,27 @@ const upsertAssignment = async (req, res, next) => {
        JOIN subject_class_assignments ca ON ca.school_id=c.school_id
          AND ca.class_id=c.id AND ca.subject_id=s.id AND ca.curriculum=c.curriculum
        WHERE u.id = $1 AND s.id = $2 AND c.id = $3 AND u.school_id = $4
+         AND c.education_stage <> 'UNASSIGNED'
+         AND c.curriculum <> 'UNASSIGNED'
+         AND s.applicable_education_stages IS NOT NULL
+         AND c.education_stage = ANY(s.applicable_education_stages)
+         AND (s.applicable_year_levels IS NULL OR (
+           c.year_level IS NOT NULL AND c.year_level = ANY(s.applicable_year_levels)
+         ))
          AND u.role = 'teacher' AND u.is_active = TRUE`,
       [teacher_id, subject_id, class_id, school_id]
     );
-    if (!valid.rows.length) return res.status(400).json({ message: 'Choose an active teacher, subject, and class from this school.' });
+    if (!valid.rows.length) {
+      const classRecord = await pool.query(
+        'SELECT education_stage, curriculum FROM classes WHERE id=$1 AND school_id=$2',
+        [class_id, school_id]
+      );
+      if (classRecord.rows[0]?.education_stage === 'UNASSIGNED'
+          || classRecord.rows[0]?.curriculum === 'UNASSIGNED') {
+        return res.status(409).json({ message: 'Assign this class an education section and curriculum before creating subject-teacher allocations.' });
+      }
+      return res.status(400).json({ message: 'Choose an active, curriculum-compatible teacher, subject, and class from this school.' });
+    }
     const result = await pool.query(
       `INSERT INTO teacher_subject_assignments (school_id, term_id, teacher_id, subject_id, class_id)
        VALUES ($1,$2,$3,$4,$5)
@@ -1301,7 +1198,6 @@ const upsertAssignment = async (req, res, next) => {
 const deleteAssignment = async (req, res, next) => {
   const { school_id } = req.user;
   try {
-    await ensureSchema();
     const version = await getDraftTerm(school_id, req.body.version_id);
     if (!version) return res.status(409).json({ message: 'Select an editable draft term before changing assignments.' });
     await pool.query('DELETE FROM teacher_subject_assignments WHERE id = $1 AND school_id = $2 AND term_id = $3', [req.params.id, school_id, version.term_id]);
@@ -1316,7 +1212,6 @@ const upsertClassTeacher = async (req, res, next) => {
   const { class_id, teacher_id, version_id } = req.body;
   if (!class_id || !teacher_id || !version_id) return res.status(400).json({ message: 'Select a draft term, class, and class teacher.' });
   try {
-    await ensureSchema();
     const version = await getDraftTerm(school_id, version_id);
     if (!version) return res.status(409).json({ message: 'Class teacher assignments can only be changed for the selected draft term.' });
     const valid = await pool.query(`SELECT c.id FROM classes c JOIN users u ON u.school_id = c.school_id
@@ -1340,7 +1235,6 @@ const upsertRequirement = async (req, res, next) => {
     return res.status(400).json({ message: 'Provide a class, subject, non-negative whole weekly period count, and a valid double-period count.' });
   }
   try {
-    await ensureSchema();
     const version = await getDraftTerm(school_id, version_id);
     if (!version) return res.status(409).json({ message: 'Weekly requirements can only be changed for the selected draft term.' });
     const valid = await pool.query(
@@ -1350,10 +1244,27 @@ const upsertRequirement = async (req, res, next) => {
        JOIN subject_class_assignments ca ON ca.school_id=c.school_id
          AND ca.class_id=c.id AND ca.subject_id=s.id AND ca.curriculum=c.curriculum
        WHERE c.id = $1 AND s.id = $2 AND c.school_id = $3
+         AND c.education_stage <> 'UNASSIGNED'
+         AND c.curriculum <> 'UNASSIGNED'
+         AND s.applicable_education_stages IS NOT NULL
+         AND c.education_stage = ANY(s.applicable_education_stages)
+         AND (s.applicable_year_levels IS NULL OR (
+           c.year_level IS NOT NULL AND c.year_level = ANY(s.applicable_year_levels)
+         ))
          AND s.is_active = TRUE AND s.is_archived = FALSE`,
       [class_id, subject_id, school_id]
     );
-    if (!valid.rows.length) return res.status(400).json({ message: 'Choose a class and subject from this school.' });
+    if (!valid.rows.length) {
+      const classRecord = await pool.query(
+        'SELECT education_stage, curriculum FROM classes WHERE id=$1 AND school_id=$2',
+        [class_id, school_id]
+      );
+      if (classRecord.rows[0]?.education_stage === 'UNASSIGNED'
+          || classRecord.rows[0]?.curriculum === 'UNASSIGNED') {
+        return res.status(409).json({ message: 'Assign this class an education section and curriculum before adding weekly subject requirements.' });
+      }
+      return res.status(400).json({ message: 'Choose a class and a subject configured for its curriculum and applicable level.' });
+    }
     const result = await pool.query(
       `INSERT INTO subject_weekly_requirements (school_id, term_id, class_id, subject_id, lessons_per_week, double_periods_per_week, room_required)
        VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -1377,7 +1288,6 @@ const upsertWorkloadLimit = async (req, res, next) => {
     return res.status(400).json({ message: 'An active teacher and positive whole-number weekly period limit are required.' });
   }
   try {
-    await ensureSchema();
     const version = await getDraftTerm(school_id, version_id);
     if (!version) return res.status(409).json({ message: 'Workload limits can only be changed for the selected draft term.' });
     const teacher = await pool.query(
@@ -1400,7 +1310,6 @@ const upsertRoom = async (req, res, next) => {
   const { name, capacity, location, is_active } = req.body;
   if (!name) return res.status(400).json({ message: 'Room name is required.' });
   try {
-    await ensureSchema();
     const result = await pool.query(
       `INSERT INTO timetable_rooms (school_id, name, capacity, location, is_active)
        VALUES ($1,$2,$3,$4,COALESCE($5, TRUE))
@@ -1420,7 +1329,6 @@ const upsertPeriod = async (req, res, next) => {
   const timeError = validateTime(start_time, end_time);
   if (!name || timeError) return res.status(400).json({ message: timeError || 'Period name is required.' });
   try {
-    await ensureSchema();
     const version = await getDraftTerm(school_id, version_id);
     if (!version) return res.status(409).json({ message: 'School periods can only be changed for the selected draft term.' });
     const result = await pool.query(
@@ -1444,7 +1352,6 @@ const upsertAvailability = async (req, res, next) => {
   const timeError = validateTime(start_time, end_time);
   if (!tableByType[type] || !ownerId || !day_of_week || timeError) return res.status(400).json({ message: timeError || 'Type, owner, day, and time are required.' });
   try {
-    await ensureSchema();
     const version = await getDraftTerm(school_id, version_id);
     if (!version) return res.status(409).json({ message: 'Availability can only be changed for the selected draft term.' });
     const result = await pool.query(
@@ -1463,7 +1370,6 @@ const updateTimetableSettings = async (req, res, next) => {
   const { school_id } = req.user;
   const { subject_teaching_starts_from, version_id } = req.body;
   try {
-    await ensureSchema();
     const version = await getDraftTerm(school_id, version_id);
     if (!version) return res.status(409).json({ message: 'Settings can only be changed for the selected draft term.' });
     const result = await pool.query(
@@ -1480,7 +1386,6 @@ const updateTimetableSettings = async (req, res, next) => {
 const getValidation = async (req, res, next) => {
   const { school_id } = req.user;
   try {
-    await ensureSchema();
     if (!req.query.version_id) return res.status(400).json({ message: 'Select the academic year and term before validating.' });
     const version = await getCurrentVersion(school_id, req.query.version_id);
     if (!version) return res.status(404).json({ message: 'No timetable version exists for this school.' });
@@ -1492,7 +1397,8 @@ const getValidation = async (req, res, next) => {
     }
 
     const requirements = await pool.query(
-            `SELECT r.*, c.name AS class_name, c.year_level, s.name AS subject_name,
+            `SELECT r.*, c.name AS class_name, c.year_level, c.education_stage,
+              c.curriculum, s.name AS subject_name,
               COALESCE(SUM(t.period_count), 0)::INTEGER AS generated_periods,
               COUNT(t.id)::INTEGER AS generated_lessons,
               COUNT(*) FILTER (WHERE t.period_count = 2)::INTEGER AS scheduled_double_periods,
@@ -1505,6 +1411,17 @@ const getValidation = async (req, res, next) => {
                   WHERE ca.school_id = r.school_id AND ca.term_id = r.term_id AND ca.class_id = r.class_id),
                   c.class_teacher_id)
                   AND u.school_id = c.school_id AND u.is_active = TRUE AND u.role = 'teacher') AS has_class_teacher,
+              EXISTS (SELECT 1 FROM curriculum_subjects cs
+                WHERE cs.school_id = c.school_id AND cs.subject_id = s.id
+                  AND cs.curriculum = c.curriculum) AS curriculum_subject_configured,
+              EXISTS (SELECT 1 FROM subject_class_assignments ca
+                WHERE ca.school_id = c.school_id AND ca.class_id = c.id
+                  AND ca.subject_id = s.id AND ca.curriculum = c.curriculum) AS class_subject_configured,
+              (s.applicable_education_stages IS NOT NULL
+                AND c.education_stage = ANY(s.applicable_education_stages)) AS applicable_stage,
+              (s.applicable_year_levels IS NULL OR (
+                c.year_level IS NOT NULL AND c.year_level = ANY(s.applicable_year_levels)
+              )) AS applicable_level,
               c.teaching_model
        FROM subject_weekly_requirements r
        JOIN classes c ON r.class_id = c.id
@@ -1512,7 +1429,8 @@ const getValidation = async (req, res, next) => {
        LEFT JOIN timetables t ON t.school_id = r.school_id AND t.version_id = $2
          AND t.class_id = r.class_id AND t.subject_id = r.subject_id
        WHERE r.school_id = $1 AND r.term_id = $3
-      GROUP BY r.id, c.name, c.year_level, c.teaching_model, s.name
+      GROUP BY r.id, c.name, c.year_level, c.education_stage, c.curriculum,
+               c.teaching_model, s.id, s.name, s.applicable_year_levels
        ORDER BY c.name, s.name`,
       [school_id, version.id, version.term_id]
     );
@@ -1533,6 +1451,41 @@ const getValidation = async (req, res, next) => {
     }
 
     for (const requirement of weekly) {
+      if (requirement.education_stage === 'UNASSIGNED' || requirement.curriculum === 'UNASSIGNED') {
+        conflicts.push(createConflict(
+          'CLASSIFICATION_PENDING',
+          `Confirm the education section and curriculum for ${requirement.class_name} before validating its timetable.`,
+          { class_id: requirement.class_id, education_stage: requirement.education_stage, curriculum: requirement.curriculum }
+        ));
+      }
+      if (!requirement.curriculum_subject_configured) {
+        conflicts.push(createConflict(
+          'CURRICULUM_SUBJECT_CONFLICT',
+          `${requirement.subject_name} is not mapped to ${requirement.class_name}'s explicit curriculum.`,
+          { class_id: requirement.class_id, subject_id: requirement.subject_id }
+        ));
+      }
+      if (!requirement.class_subject_configured) {
+        conflicts.push(createConflict(
+          'CLASS_SUBJECT_ASSIGNMENT_CONFLICT',
+          `${requirement.subject_name} is not assigned to ${requirement.class_name}.`,
+          { class_id: requirement.class_id, subject_id: requirement.subject_id }
+        ));
+      }
+      if (!requirement.applicable_level) {
+        conflicts.push(createConflict(
+          'SUBJECT_LEVEL_CONFLICT',
+          `${requirement.subject_name} is not configured for the numeric level of ${requirement.class_name}.`,
+          { class_id: requirement.class_id, subject_id: requirement.subject_id }
+        ));
+      }
+      if (!requirement.applicable_stage) {
+        conflicts.push(createConflict(
+          'SUBJECT_STAGE_CONFLICT',
+          `${requirement.subject_name} is not configured for the education section of ${requirement.class_name}.`,
+          { class_id: requirement.class_id, subject_id: requirement.subject_id }
+        ));
+      }
       if (requirement.missing_teacher_assignment) {
         conflicts.push(createConflict(
           'SUBJECT_ASSIGNMENT_MISSING',
@@ -1579,7 +1532,6 @@ const getValidation = async (req, res, next) => {
 const getHealth = async (req, res, next) => {
   const { school_id } = req.user;
   try {
-    await ensureSchema();
     if (!req.query.version_id) return res.status(400).json({ message: 'Select the academic year and term before viewing timetable health.' });
     const validation = await new Promise((resolve, reject) => {
       const fakeRes = { json: resolve };
@@ -1609,7 +1561,6 @@ const getHealth = async (req, res, next) => {
 const getSuggestions = async (req, res, next) => {
   const { school_id } = req.user;
   try {
-    await ensureSchema();
     const payload = { ...req.query, ...req.body };
     const version = await getCurrentVersion(school_id, payload.version_id);
     if (!version || version.status !== 'DRAFT') return res.status(400).json({ message: 'Select an editable draft for an academic year and term first.' });
@@ -1651,7 +1602,6 @@ const generateTimetable = async (req, res, next) => {
   const client = await pool.connect();
   let transactionOpen = false;
   try {
-    await ensureSchema();
     await client.query('BEGIN');
     transactionOpen = true;
     const locked = await lockDraftVersion(client, school_id, version_id, expected_revision);
@@ -1682,10 +1632,22 @@ const generateTimetable = async (req, res, next) => {
 
       const requirements = await client.query(
       `SELECT r.*, c.name AS class_name, c.year_level, c.teaching_model,
+              c.education_stage, c.curriculum,
               COALESCE((SELECT ca.teacher_id FROM timetable_class_teacher_assignments ca
                WHERE ca.school_id = c.school_id AND ca.term_id = r.term_id AND ca.class_id = c.id),
               c.class_teacher_id) AS class_teacher_id,
               s.name AS subject_name,
+              EXISTS (SELECT 1 FROM curriculum_subjects cs
+                WHERE cs.school_id = c.school_id AND cs.subject_id = s.id
+                  AND cs.curriculum = c.curriculum) AS curriculum_subject_configured,
+              EXISTS (SELECT 1 FROM subject_class_assignments ca
+                WHERE ca.school_id = c.school_id AND ca.class_id = c.id
+                  AND ca.subject_id = s.id AND ca.curriculum = c.curriculum) AS class_subject_configured,
+              (s.applicable_education_stages IS NOT NULL
+                AND c.education_stage = ANY(s.applicable_education_stages)) AS applicable_stage,
+              (s.applicable_year_levels IS NULL OR (
+                c.year_level IS NOT NULL AND c.year_level = ANY(s.applicable_year_levels)
+              )) AS applicable_level,
               (SELECT COUNT(*)::INTEGER FROM students st WHERE st.class_id = c.id AND st.school_id = c.school_id) AS student_count
        FROM subject_weekly_requirements r
        JOIN classes c ON c.id = r.class_id AND c.school_id = r.school_id
@@ -1698,6 +1660,31 @@ const generateTimetable = async (req, res, next) => {
       await client.query('ROLLBACK');
       transactionOpen = false;
       return res.status(400).json({ message: 'Configure weekly subject requirements before generating a timetable.' });
+    }
+    const unresolvedClassification = requirements.rows.filter((item) => (
+      item.education_stage === 'UNASSIGNED' || item.curriculum === 'UNASSIGNED'
+    ));
+    if (unresolvedClassification.length) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      return res.status(409).json({
+        message: 'Classify each education section and curriculum before generating a timetable.',
+        classes: [...new Set(unresolvedClassification.map((item) => item.class_name))],
+      });
+    }
+    const incompatibleRequirements = requirements.rows.filter((item) => (
+      !item.curriculum_subject_configured || !item.class_subject_configured
+      || !item.applicable_level || !item.applicable_stage
+    ));
+    if (incompatibleRequirements.length) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      return res.status(409).json({
+        message: 'Resolve curriculum mappings, class-subject assignments, and applicable-level mismatches before generating a timetable.',
+        requirements: incompatibleRequirements.map(({ class_id, class_name, subject_id, subject_name }) => ({
+          class_id, class_name, subject_id, subject_name,
+        })),
+      });
     }
 
     const periodResult = await client.query(
@@ -1964,7 +1951,6 @@ const publishTimetable = async (req, res, next) => {
   const client = await pool.connect();
   let transactionOpen = false;
   try {
-    await ensureSchema();
     await client.query('BEGIN');
     transactionOpen = true;
     const locked = await lockDraftVersion(client, school_id, version_id, expected_revision);

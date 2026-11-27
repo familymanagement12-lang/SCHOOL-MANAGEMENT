@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 ALTER TABLE classes
@@ -8,19 +6,9 @@ ALTER TABLE classes
   ADD COLUMN IF NOT EXISTS class_teacher_id INTEGER REFERENCES users(id) ON DELETE RESTRICT;
 
 UPDATE classes
-SET year_level = substring(name FROM '(?i)(?:year|grade|class)[[:space:]]*([0-9]+)')::INTEGER
-WHERE year_level IS NULL
-  AND name ~* '(year|grade|class)[[:space:]]*[0-9]+';
-
-UPDATE classes
 SET class_teacher_id = teacher_id
 WHERE class_teacher_id IS NULL AND teacher_id IS NOT NULL;
 
-UPDATE classes
-SET teaching_model = CASE WHEN year_level BETWEEN 1 AND 3 THEN 'class_teacher' ELSE 'subject_teacher' END
-WHERE teaching_model IS NULL;
-
-ALTER TABLE classes ALTER COLUMN teaching_model SET DEFAULT 'subject_teacher';
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'classes_teaching_model_check') THEN
     ALTER TABLE classes ADD CONSTRAINT classes_teaching_model_check
@@ -184,6 +172,42 @@ BEGIN
   END IF;
 END $$;
 
+DO $$
+DECLARE
+  unresolved RECORD;
+BEGIN
+  SELECT t.id AS timetable_id,
+         t.school_id,
+         COALESCE(t.academic_year, s.academic_year, 'Unassigned') AS academic_year,
+         COALESCE(t.term, s.current_term, 'Unassigned') AS term,
+         CASE WHEN t.status = 'PUBLISHED' THEN 'PUBLISHED' ELSE 'DRAFT' END AS status,
+         COUNT(v.id)::INTEGER AS matching_versions
+  INTO unresolved
+  FROM timetables t
+  JOIN schools s ON s.id = t.school_id
+  LEFT JOIN timetable_versions v
+    ON v.school_id = t.school_id
+   AND v.academic_year = COALESCE(t.academic_year, s.academic_year, 'Unassigned')
+   AND v.term = COALESCE(t.term, s.current_term, 'Unassigned')
+   AND v.status = CASE WHEN t.status = 'PUBLISHED' THEN 'PUBLISHED' ELSE 'DRAFT' END
+  WHERE t.version_id IS NULL
+  GROUP BY t.id, t.school_id,
+           COALESCE(t.academic_year, s.academic_year, 'Unassigned'),
+           COALESCE(t.term, s.current_term, 'Unassigned'),
+           CASE WHEN t.status = 'PUBLISHED' THEN 'PUBLISHED' ELSE 'DRAFT' END
+  HAVING COUNT(v.id) <> 1
+  ORDER BY t.id
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION
+      'Cannot assign timetable entry % in school % to a version for academic year "%", term "%", status "%": expected exactly one matching version, found %.',
+      unresolved.timetable_id, unresolved.school_id, unresolved.academic_year,
+      unresolved.term, unresolved.status, unresolved.matching_versions;
+  END IF;
+END
+$$;
+
 UPDATE timetables t
 SET version_id = v.id
 FROM timetable_versions v
@@ -192,12 +216,6 @@ WHERE t.version_id IS NULL AND t.school_id = v.school_id
   AND v.academic_year = COALESCE(t.academic_year, s.academic_year, 'Unassigned')
   AND v.term = COALESCE(t.term, s.current_term, 'Unassigned')
   AND v.status = CASE WHEN t.status = 'PUBLISHED' THEN 'PUBLISHED' ELSE 'DRAFT' END;
-
-UPDATE timetables t
-SET version_id = v.id
-FROM timetable_versions v
-WHERE t.version_id IS NULL AND v.school_id = t.school_id
-  AND v.status = 'DRAFT';
 
 ALTER TABLE timetables ALTER COLUMN version_id SET NOT NULL;
 DO $$ BEGIN
@@ -242,5 +260,3 @@ CREATE TABLE IF NOT EXISTS timetable_audit_log (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_timetable_audit_version ON timetable_audit_log (school_id, version_id, created_at DESC);
-
-COMMIT;

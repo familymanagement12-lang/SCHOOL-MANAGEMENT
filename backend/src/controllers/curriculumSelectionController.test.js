@@ -22,6 +22,7 @@ test('parent pathway submissions require a linked child and never assign a class
           rows: [{
             id: 44, name: 'Student', class_id: 12, curriculum: 'COMMON',
             year_level: 6, class_curriculum: 'COMMON',
+            class_education_stage: 'PRIMARY',
             academic_year: '2026/2027', period_open: true,
           }],
         };
@@ -131,13 +132,14 @@ test('class assignment is blocked until approval and validates the requested pat
     status: 'approved_pending_class', current_class_id: 12,
     current_curriculum: 'COMMON', current_year_level: 6,
     current_class_curriculum: 'COMMON',
+    current_education_stage: 'PRIMARY',
   };
   const res = response();
   pool.connect = async () => ({
     async query(sql) {
       if (sql.includes('FOR UPDATE OF selection, student')) return { rowCount: 1, rows: [{ ...selection, status: 'pending_approval' }] };
       if (sql.includes('FROM classes') && sql.includes('FOR UPDATE')) {
-        return { rowCount: 1, rows: [{ id: 18, name: 'JHS 1 - A', year_level: 7, curriculum: 'GES' }] };
+        return { rowCount: 1, rows: [{ id: 18, name: 'JHS 1 - A', year_level: 7, curriculum: 'GES', education_stage: 'JHS' }] };
       }
       if (/UPDATE\s+students/i.test(sql)) shouldAssignStudent = true;
       return { rowCount: 1, rows: [] };
@@ -161,7 +163,7 @@ test('class assignment is blocked until approval and validates the requested pat
     async query(sql) {
       if (sql.includes('FOR UPDATE OF selection, student')) return { rowCount: 1, rows: [selection] };
       if (sql.includes('FROM classes') && sql.includes('FOR UPDATE')) {
-        return { rowCount: 1, rows: [{ id: 18, name: 'Year 7 - A', year_level: 7, curriculum: 'PEARSON' }] };
+        return { rowCount: 1, rows: [{ id: 18, name: 'Year 7 - A', year_level: 7, curriculum: 'PEARSON', education_stage: 'UNASSIGNED' }] };
       }
       if (/UPDATE\s+students/i.test(sql)) shouldAssignStudent = true;
       return { rowCount: 1, rows: [] };

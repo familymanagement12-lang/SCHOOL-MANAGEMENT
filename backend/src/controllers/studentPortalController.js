@@ -5,6 +5,7 @@ const getStudent = async (userId, schoolId) => {
   const result = await pool.query(
     `SELECT s.id, LPAD(s.id::text, 6, '0') AS student_id, s.name, s.dob,
             s.class_id, s.curriculum, c.name AS class_name, c.year_level,
+            c.education_stage, c.programme, c.curriculum AS class_curriculum,
             sc.name AS school_name, sc.academic_year, sc.current_term,
             u.is_active AS account_active
      FROM students s
@@ -18,7 +19,11 @@ const getStudent = async (userId, schoolId) => {
   if (!student) return null;
   return {
     ...student,
-    class_name: canonicalClassName(student.class_name, student.year_level, student.curriculum),
+    curriculum_configuration_mismatch: Boolean(student.class_id)
+      && student.curriculum !== student.class_curriculum,
+    class_name: canonicalClassName(
+      student.class_name, student.year_level, student.class_curriculum, student.education_stage
+    ),
   };
 };
 
@@ -58,6 +63,12 @@ const getSubjects = async (req, res, next) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     if (!student.class_id) return res.json([]);
+    if (student.education_stage === 'UNASSIGNED' || student.curriculum === 'UNASSIGNED') {
+      return res.status(409).json({ message: 'Subject allocations are unavailable until this class section and curriculum are confirmed.' });
+    }
+    if (student.curriculum_configuration_mismatch) {
+      return res.status(409).json({ message: 'Subject allocations are unavailable until an administrator reviews the student and class curriculum mismatch.' });
+    }
     const result = await pool.query(
       `SELECT s.id, s.name, s.code, cs.curriculum,
               COALESCE(
@@ -104,6 +115,12 @@ const getTimetable = async (req, res, next) => {
     const student = await requireStudent(req, res);
     if (!student) return;
     if (!student.class_id) return res.json([]);
+    if (student.education_stage === 'UNASSIGNED' || student.class_curriculum === 'UNASSIGNED') {
+      return res.status(409).json({ message: 'Timetable access is unavailable until this class section and curriculum are confirmed.' });
+    }
+    if (student.curriculum_configuration_mismatch) {
+      return res.status(409).json({ message: 'Timetable access is unavailable until an administrator reviews the student and class curriculum mismatch.' });
+    }
     const result = await pool.query(
       `SELECT t.id, t.day_of_week, t.start_time, t.end_time,
               COALESCE(t.subject_name_snapshot, s.name, t.subject) AS subject,
@@ -171,14 +188,14 @@ const getResults = async (req, res, next) => {
                 FROM class_assessments a
                 LEFT JOIN class_assessment_scores m ON m.assessment_id = a.id
                   AND m.student_id = r.student_id AND m.school_id = a.school_id
-                WHERE a.school_id = r.school_id AND a.class_id = $3
+                WHERE a.school_id = r.school_id AND a.class_id = r.class_id
                   AND a.subject = r.subject AND a.term = r.term
               ), '[]'::json) AS class_assessments
        FROM results r
-       WHERE r.school_id = $1 AND r.student_id = $2 AND r.curriculum = $4
+       WHERE r.school_id = $1 AND r.student_id = $2
          AND r.is_published = TRUE
        ORDER BY r.created_at DESC, r.subject`,
-      [req.user.school_id, student.id, student.class_id || 0, student.curriculum]
+      [req.user.school_id, student.id]
     );
     res.json(result.rows);
   } catch (error) {
@@ -219,9 +236,9 @@ const getDashboard = async (req, res, next) => {
       ),
       pool.query(
         `SELECT subject, score, term, created_at FROM results
-         WHERE school_id = $1 AND student_id = $2 AND curriculum = $3 AND is_published = TRUE
+         WHERE school_id = $1 AND student_id = $2 AND is_published = TRUE
          ORDER BY created_at DESC LIMIT 5`,
-        [req.user.school_id, student.id, student.curriculum]
+        [req.user.school_id, student.id]
       ),
       pool.query(
         `SELECT id, title, message, created_at FROM announcements
@@ -238,6 +255,30 @@ const getDashboard = async (req, res, next) => {
         [req.user.school_id, student.class_id || 0, student.academic_year, student.current_term]
       ),
     ]);
+    const featureSchema = await pool.query(`SELECT
+      to_regclass('public.learning_assignments') IS NOT NULL AS assignments,
+      to_regclass('public.learning_materials') IS NOT NULL AS materials`);
+    let assignments = { rows: [{ total: 0 }] }, materials = { rows: [{ total: 0 }] };
+    if (featureSchema.rows[0]?.assignments && featureSchema.rows[0]?.materials) {
+      [assignments,materials] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS total FROM assignment_recipients r
+           JOIN assignment_submissions sub ON sub.school_id=r.school_id
+             AND sub.assignment_id=r.assignment_id AND sub.student_id=r.student_id
+           JOIN learning_assignments a ON a.school_id=r.school_id AND a.id=r.assignment_id
+           WHERE r.school_id=$1 AND r.student_id=$2 AND a.status='PUBLISHED'
+             AND COALESCE(a.issue_at,a.published_at)<=NOW()
+             AND sub.status NOT IN ('SUBMITTED','SUBMITTED_LATE','AWAITING_MARKING','MARKED','RETURNED','EXCUSED')`,
+          [req.user.school_id,student.id]
+        ),
+        pool.query(
+          `SELECT COUNT(DISTINCT m.id)::int AS total FROM learning_materials m
+           JOIN learning_material_files f ON f.school_id=m.school_id AND f.material_id=m.id
+           WHERE m.school_id=$1 AND m.class_id=$2 AND m.status='PUBLISHED'`,
+          [req.user.school_id,student.class_id || 0]
+        ),
+      ]);
+    }
     const totalAttendance = attendance.rows[0].total;
     res.json({
       profile: student,
@@ -248,8 +289,9 @@ const getDashboard = async (req, res, next) => {
       recent_announcements: announcements.rows,
       timetable_entries: timetable.rows[0].total,
       upcoming_exams: [],
-      pending_assignments: [],
-      unavailable_modules: ['assignments', 'learning_materials', 'examination_calendar'],
+      pending_assignments: assignments.rows[0].total,
+      learning_materials: materials.rows[0].total,
+      unavailable_modules: ['examination_calendar'],
     });
   } catch (error) {
     next(error);

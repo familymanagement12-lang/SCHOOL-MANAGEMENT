@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE TABLE IF NOT EXISTS curriculum_selection_periods (
   id BIGSERIAL PRIMARY KEY,
   school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
@@ -120,15 +118,18 @@ CREATE TABLE IF NOT EXISTS curriculum_selection_notification_log (
 CREATE OR REPLACE FUNCTION canonical_curriculum_class_name(
   class_name TEXT,
   year_level INTEGER,
-  curriculum TEXT
+  curriculum TEXT,
+  education_stage TEXT
 ) RETURNS TEXT AS $$
   SELECT CASE
-    WHEN UPPER(COALESCE(curriculum, '')) = 'GES'
+    WHEN UPPER(COALESCE(education_stage, 'UNASSIGNED')) = 'JHS'
+      AND UPPER(COALESCE(curriculum, '')) = 'GES'
       AND year_level BETWEEN 7 AND 9
       THEN 'JHS ' || (year_level - 6)::TEXT
         || CASE WHEN section_name <> '' THEN ' - ' || section_name ELSE '' END
-    WHEN UPPER(COALESCE(curriculum, '')) = 'PEARSON'
-      AND year_level BETWEEN 7 AND 11
+    WHEN UPPER(COALESCE(education_stage, 'UNASSIGNED')) = 'PRIMARY'
+      AND UPPER(COALESCE(curriculum, '')) = 'COMMON'
+      AND year_level BETWEEN 1 AND 6
       THEN 'Year ' || year_level::TEXT
         || CASE WHEN section_name <> '' THEN ' - ' || section_name ELSE '' END
     ELSE NULLIF(BTRIM(class_name), '')
@@ -147,17 +148,6 @@ ALTER TABLE results
   ADD COLUMN IF NOT EXISTS year_level_snapshot INTEGER,
   ADD COLUMN IF NOT EXISTS academic_year_snapshot TEXT;
 
-UPDATE results r
-SET class_name_snapshot = canonical_curriculum_class_name(c.name, c.year_level, c.curriculum),
-    year_level_snapshot = c.year_level,
-    academic_year_snapshot = sc.academic_year
-FROM classes c
-JOIN schools sc ON sc.id = c.school_id
-WHERE r.class_id = c.id AND r.school_id = c.school_id
-  AND (r.class_name_snapshot IS NULL
-    OR r.year_level_snapshot IS NULL
-    OR r.academic_year_snapshot IS NULL);
-
 CREATE OR REPLACE FUNCTION set_result_curriculum_snapshot() RETURNS trigger AS $$
 DECLARE
   student_class INTEGER;
@@ -167,7 +157,7 @@ DECLARE
   snapshot_academic_year TEXT;
 BEGIN
   SELECT s.class_id, COALESCE(s.curriculum, 'UNASSIGNED'),
-         canonical_curriculum_class_name(c.name, c.year_level, c.curriculum),
+         canonical_curriculum_class_name(c.name, c.year_level, c.curriculum, c.education_stage),
          c.year_level, sc.academic_year
   INTO student_class, student_curriculum, snapshot_name, snapshot_year,
        snapshot_academic_year
@@ -210,23 +200,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS student_class_history_active_unique
   WHERE student_id IS NOT NULL AND effective_to IS NULL;
 CREATE INDEX IF NOT EXISTS student_class_history_student_idx
   ON student_class_history (school_id, student_id, effective_from DESC);
-
--- Existing class assignments are recorded as a baseline from this migration date forward.
-INSERT INTO student_class_history
-  (school_id, student_id, class_id, student_name_snapshot, class_name_snapshot,
-   year_level_snapshot, curriculum_snapshot, academic_year_snapshot, effective_from,
-   change_reason)
-SELECT s.school_id, s.id, c.id, s.name,
-       canonical_curriculum_class_name(c.name, c.year_level, c.curriculum),
-       c.year_level, COALESCE(s.curriculum, 'UNASSIGNED'), sc.academic_year,
-       CURRENT_DATE, 'migration_baseline'
-FROM students s
-JOIN classes c ON c.id = s.class_id AND c.school_id = s.school_id
-JOIN schools sc ON sc.id = s.school_id
-WHERE NOT EXISTS (
-  SELECT 1 FROM student_class_history h
-  WHERE h.school_id = s.school_id AND h.student_id = s.id AND h.effective_to IS NULL
-);
 
 ALTER TABLE student_class_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE student_class_history FORCE ROW LEVEL SECURITY;
@@ -275,7 +248,7 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT canonical_curriculum_class_name(c.name, c.year_level, c.curriculum),
+  SELECT canonical_curriculum_class_name(c.name, c.year_level, c.curriculum, c.education_stage),
          c.year_level, COALESCE(c.curriculum, 'UNASSIGNED'), sc.academic_year
   INTO current_class_name, current_year_level, current_curriculum, current_academic_year
   FROM classes c
@@ -302,7 +275,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 DROP TRIGGER IF EXISTS results_set_curriculum_snapshot ON results;
 CREATE TRIGGER results_set_curriculum_snapshot
-  BEFORE INSERT OR UPDATE OF student_id, school_id ON results
+  BEFORE INSERT ON results
   FOR EACH ROW EXECUTE FUNCTION set_result_curriculum_snapshot();
 
 DROP TRIGGER IF EXISTS students_record_class_history ON students;
@@ -312,5 +285,3 @@ CREATE TRIGGER students_record_class_history
 
 CREATE INDEX IF NOT EXISTS idx_results_class_snapshot
   ON results (school_id, student_id, academic_year_snapshot, term);
-
-COMMIT;

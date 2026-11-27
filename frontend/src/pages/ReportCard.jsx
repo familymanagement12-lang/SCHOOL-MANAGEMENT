@@ -111,7 +111,10 @@ function ReportCard() {
           <div><strong style={{ color: '#64748b' }}>Student Name:</strong> {report.student.name}</div>
           <div><strong style={{ color: '#64748b' }}>Student ID:</strong> {report.student.student_id}</div>
           <div><strong style={{ color: '#64748b' }}>Class:</strong> {report.student.class_name}</div>
-          <div><strong style={{ color: '#64748b' }}>Academic Year:</strong> {report.student.academic_year || school.academic_year || 'Not set'}</div>
+          <div><strong style={{ color: '#64748b' }}>Academic Year:</strong> {report.student.historical_context_missing ? 'Historical year not recorded' : report.student.academic_year || school.academic_year || 'Not set'}</div>
+          {report.student.historical_context_missing && <div style={{ gridColumn: '1 / -1', color: '#9a3412' }}>
+            Historical class and academic-year details were not recorded for this result.
+          </div>}
         </div>
 
         {/* Grades Table */}

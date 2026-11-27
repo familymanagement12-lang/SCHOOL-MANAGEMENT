@@ -32,6 +32,7 @@ function Timetable() {
   const [editingId, setEditingId] = useState(null);
   const [selectedClasses, setSelectedClasses] = useState([]);
   const [schoolLevel, setSchoolLevel] = useState('ALL');
+  const [curriculumFilter, setCurriculumFilter] = useState('ALL');
   const [boardClassId, setBoardClassId] = useState('ALL');
   const [replaceClasses, setReplaceClasses] = useState(false);
   const [copySourceId, setCopySourceId] = useState('');
@@ -356,15 +357,18 @@ function Timetable() {
   };
 
   const classOptions = useMemo(() => meta?.classes || [...new Map(entries.map((entry) => [String(entry.class_id), {
-    id: entry.class_id, name: entry.class_name, year_level: entry.year_level, curriculum: entry.curriculum,
+    id: entry.class_id,
+    name: entry.class_name,
+    year_level: entry.year_level,
+    curriculum: entry.curriculum,
+    education_stage: entry.education_stage,
   }])).values()], [meta?.classes, entries]);
   const visibleEntries = useMemo(() => entries.filter((entry) => {
-    const levelMatch = schoolLevel === 'ALL'
-      || (schoolLevel === 'PRIMARY' && Number(entry.year_level) >= 1 && Number(entry.year_level) <= 6 && entry.curriculum === 'COMMON')
-      || (schoolLevel === 'GES' && Number(entry.year_level) >= 7 && Number(entry.year_level) <= 9 && entry.curriculum === 'GES')
-      || (schoolLevel === 'PEARSON' && entry.curriculum === 'PEARSON');
-    return levelMatch && (boardClassId === 'ALL' || String(entry.class_id) === String(boardClassId));
-  }), [entries, schoolLevel, boardClassId]);
+    const stageMatch = schoolLevel === 'ALL' || entry.education_stage === schoolLevel;
+    const curriculumMatch = curriculumFilter === 'ALL' || entry.curriculum === curriculumFilter;
+    return stageMatch && curriculumMatch
+      && (boardClassId === 'ALL' || String(entry.class_id) === String(boardClassId));
+  }), [entries, schoolLevel, curriculumFilter, boardClassId]);
   const dayList = visibleEntries.some((entry) => ['Saturday', 'Sunday'].includes(entry.day_of_week)) ? DAYS : DAYS.slice(0, 5);
   const matchingVersions = versions.filter((item) => item.academic_year === year && item.term === term);
   const isDraft = isAdmin && version?.status === 'DRAFT';
@@ -546,19 +550,30 @@ function Timetable() {
             <div className="timetable-action-buttons"><button className="btn-secondary" type="button" onClick={exportCsv} disabled={!entries.length}><Download size={14} /> Export CSV</button><button className="btn-secondary" type="button" onClick={() => window.print()}><Printer size={14} /> Print</button></div>
           </div>
           <div className="timetable-generate-row">
-            <label>School level<select value={schoolLevel} onChange={(event) => { setSchoolLevel(event.target.value); setBoardClassId('ALL'); }}>
-              <option value="ALL">All configured levels</option>
-              <option value="PRIMARY">Primary · Years 1–6</option>
-              <option value="GES">GES · JHS 1–3</option>
-              <option value="PEARSON">Pearson · Years 7–11</option>
+            <label>Education section<select value={schoolLevel} onChange={(event) => { setSchoolLevel(event.target.value); setBoardClassId('ALL'); }}>
+              <option value="ALL">All sections</option>
+              <option value="EARLY_YEARS">Early Years</option>
+              <option value="PRIMARY">Primary</option>
+              <option value="JHS">JHS</option>
+              <option value="OTHER">Other programmes</option>
+              <option value="UNASSIGNED">Pending classification</option>
+            </select></label>
+            <label>Curriculum<select value={curriculumFilter} onChange={(event) => { setCurriculumFilter(event.target.value); setBoardClassId('ALL'); }}>
+              <option value="ALL">All curricula</option>
+              <option value="COMMON">Common</option>
+              <option value="GES">GES</option>
+              <option value="PEARSON">Pearson</option>
+              <option value="UNASSIGNED">Unassigned</option>
             </select></label>
             <label>Class<select value={boardClassId} onChange={(event) => setBoardClassId(event.target.value)}>
               <option value="ALL">All classes</option>
-              {classOptions.filter((item) => schoolLevel === 'ALL'
-                || (schoolLevel === 'PRIMARY' && Number(item.year_level) >= 1 && Number(item.year_level) <= 6 && item.curriculum === 'COMMON')
-                || (schoolLevel === 'GES' && Number(item.year_level) >= 7 && Number(item.year_level) <= 9 && item.curriculum === 'GES')
-                || (schoolLevel === 'PEARSON' && item.curriculum === 'PEARSON'))
-                .map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {classOptions.filter((item) => (schoolLevel === 'ALL' || item.education_stage === schoolLevel)
+                && (curriculumFilter === 'ALL' || item.curriculum === curriculumFilter))
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}{item.education_stage === 'UNASSIGNED' ? ' · classification pending' : ''}
+                  </option>
+                ))}
             </select></label>
           </div>
           {busy && <p className="timetable-loading">Loading term timetable...</p>}

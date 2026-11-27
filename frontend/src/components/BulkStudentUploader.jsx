@@ -217,7 +217,7 @@ const BulkStudentUploader = ({ onSuccess }) => {
       )}
       {credentials.length > 0 && (
         <div style={{ marginBottom: '1rem', maxHeight: '220px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.75rem' }}>
-          <strong>One-time student portal credentials</strong>
+          <strong>One-time student portal credentials · portals active</strong>
           {credentials.map((credential) => (
             <div key={credential.student_id} style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
               <div><strong>{credential.name}</strong> · {credential.student_id}</div>

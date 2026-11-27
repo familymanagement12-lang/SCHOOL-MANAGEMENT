@@ -8,44 +8,30 @@ function curriculumForYearLevel(yearLevel, requestedCurriculum) {
   const year = Number(yearLevel);
   const requested = requestedCurriculum ? String(requestedCurriculum).toUpperCase() : null;
 
-  if (!Number.isInteger(year) || year < 1 || year > 11) {
+  if (yearLevel !== null && yearLevel !== undefined && yearLevel !== ''
+      && (!Number.isInteger(year) || year < 1 || year > 11)) {
     throw new Error('Year level must be between 1 and 11.');
   }
-  if (requested && !CURRICULA.includes(requested)) {
-    throw new Error('Select Common, GES, or Pearson curriculum.');
+  if (requested && ![...CURRICULA, 'UNASSIGNED'].includes(requested)) {
+    throw new Error('Select Common, GES, Pearson, or leave curriculum unassigned.');
   }
-  if (year <= 6) {
-    if (requested && requested !== 'COMMON') throw new Error('Years 1–6 use the common school curriculum.');
-    return 'COMMON';
-  }
-  if (year <= 9) {
-    if (!['GES', 'PEARSON'].includes(requested)) {
-      throw new Error('Years 7–9 require either GES or Pearson curriculum.');
-    }
-    return requested;
-  }
-  if (requested === 'GES' || requested === 'COMMON') {
-    throw new Error('Years 10–11 use Pearson curriculum only.');
-  }
-  return 'PEARSON';
+  return requested || 'UNASSIGNED';
 }
 
-function classStageLabel(yearLevel, curriculum) {
+function classStageLabel(yearLevel, curriculum, educationStage = 'UNASSIGNED') {
   const year = Number(yearLevel);
   const path = String(curriculum || '').toUpperCase();
-  if (path === 'GES' && year >= 7 && year <= 9) return `JHS ${year - 6}`;
-  if ((path === 'PEARSON' && year >= 7 && year <= 11)
-      || (path === 'COMMON' && year >= 1 && year <= 6)) {
-    return `Year ${year}`;
-  }
+  const stage = String(educationStage || 'UNASSIGNED').toUpperCase();
+  if (stage === 'JHS' && path === 'GES' && year >= 7 && year <= 9) return `JHS ${year - 6}`;
+  if (stage === 'PRIMARY' && path === 'COMMON' && year >= 1 && year <= 6) return `Year ${year}`;
   return null;
 }
 
-function canonicalClassName(name, yearLevel, curriculum) {
+function canonicalClassName(name, yearLevel, curriculum, educationStage = 'UNASSIGNED') {
   const value = typeof name === 'string' ? name.trim() : '';
   const path = String(curriculum || '').toUpperCase();
-  const stage = classStageLabel(yearLevel, path);
-  if (!stage || !['GES', 'PEARSON'].includes(path)) return value;
+  const stage = classStageLabel(yearLevel, path, educationStage);
+  if (!stage || !['JHS', 'PRIMARY'].includes(String(educationStage || '').toUpperCase())) return value;
 
   const section = value.replace(/^(?:JHS\s*[1-3]|Year\s*\d+)\s*(?:[-:]\s*)?/i, '').trim();
   return section ? `${stage} - ${section}` : stage;
@@ -85,7 +71,12 @@ function pathwayProgression(curriculum) {
     { year_level: 6, curriculum: 'COMMON', label: 'Year 6' },
     ...Array.from({ length: choice.lastYearLevel - choice.firstYearLevel + 1 }, (_value, index) => {
       const yearLevel = choice.firstYearLevel + index;
-      return { year_level: yearLevel, curriculum: path, label: classStageLabel(yearLevel, path) };
+      return {
+        year_level: yearLevel,
+        curriculum: path,
+        education_stage: path === 'GES' ? 'JHS' : 'UNASSIGNED',
+        label: path === 'GES' ? classStageLabel(yearLevel, path, 'JHS') : `Year ${yearLevel}`,
+      };
     }),
   ];
 }
